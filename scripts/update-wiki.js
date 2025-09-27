@@ -52,23 +52,50 @@ function pickCat(repo) {
   return UNC;
 }
 
+// 👉 기존 fetchStarred 함수 전체를 아래로 교체
 async function fetchStarred() {
   let page = 1, per_page = 100, all = [];
   while (true) {
-    const { data } = await octokit.activity.listReposStarredByAuthenticatedUser({ page, per_page });
-    const repos = data.map(x => x.repo);
+    const res = await octokit.activity.listReposStarredByAuthenticatedUser({ page, per_page });
+    // repo가 null/undefined인 이벤트를 제거
+    const repos = res.data.map(x => x.repo).filter(Boolean);
     all = all.concat(repos);
     if (repos.length < per_page) break;
     page++;
   }
+
+  // 토픽 보강(상위 300개 정도만)
   for (const r of all.slice(0, 300)) {
+    // owner/name이 없으면 건너뜀
+    if (!r?.owner?.login || !r?.name) continue;
     try {
-      const { data } = await octokit.repos.getAllTopics({ owner: r.owner.login, repo: r.name });
-      r.topics = data.names || [];
-    } catch { r.topics = r.topics || []; }
+      const topicsRes = await octokit.repos.getAllTopics({
+        owner: r.owner.login,
+        repo: r.name,
+      });
+      r.topics = topicsRes?.data?.names ?? [];
+    } catch {
+      // 404/권한 문제 등은 무시
+      r.topics = r.topics ?? [];
+    }
   }
-  return all;
 }
+
+// 👉 기존 pickCategory 함수를 아래로 교체
+function pickCategory(repo) {
+  const hay = `${repo?.name ?? ""} ${repo?.description ?? ""}`.toLowerCase();
+  const topics = Array.isArray(repo?.topics)
+    ? repo.topics.map(t => String(t).toLowerCase())
+    : [];
+
+  for (const [cat, kws] of Object.entries(KEYWORDS)) {
+    if (kws.some(k => hay.includes(k))) return cat;
+    if (topics.some(t => kws.some(k => t.includes(k)))) return cat;
+  }
+  return UNC; // "기타 / 미분류"
+}
+
+
 
 function renderHome(groups) {
   const now = new Date().toISOString();
