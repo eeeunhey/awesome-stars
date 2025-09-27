@@ -1,12 +1,12 @@
-// scripts/update-wiki.js  (ESM)
+// scripts/update-wiki.js (ESM)
 import fs from "fs";
 import path from "path";
 import { Octokit } from "@octokit/rest";
 
-const WIKI_DIR = "wiki";                          // ./wiki 에 위키 저장소가 클론됨
+const WIKI_DIR = "wiki";                               // ./wiki 에 위키 저장소 클론됨
 const octokit  = new Octokit({ auth: process.env.STAR_TOKEN });
 
-// ===== 카테고리 정의 =====
+// ===== 카테고리 / 키워드 =====
 const CATS = [
   "확장 & 기타 (Extensions & Others)",
   "자동화 (Automation)",
@@ -43,13 +43,11 @@ const lineOf = (r) => {
   return `- [${full}](${r.html_url}) — ${desc}${stars ? `  ⭐ ${stars}` : ""}`;
 };
 
-// ===== 안전한 분류 =====
 function pickCategory(repo) {
   const hay = `${repo?.name ?? ""} ${repo?.description ?? ""}`.toLowerCase();
   const topics = Array.isArray(repo?.topics)
     ? repo.topics.map((t) => String(t).toLowerCase())
     : [];
-
   for (const [cat, kws] of Object.entries(KEYWORDS)) {
     if (kws.some((k) => hay.includes(k))) return cat;
     if (topics.some((t) => kws.some((k) => t.includes(k)))) return cat;
@@ -57,27 +55,37 @@ function pickCategory(repo) {
   return UNC;
 }
 
-// ===== 스타 가져오기(안전판) =====
-async function fetchStarred() {
-  // 페이지네이션으로 전부 수집
-  const events = await octokit.paginate(
+// ===== 스타 가져오기 (인증 → 0건이면 공개 스타 폴백) =====
+async function fetchStarred(username) {
+  // 1) 인증 사용자 기준(비공개 포함 가능)
+  const authEvents = await octokit.paginate(
     octokit.activity.listReposStarredByAuthenticatedUser,
     { per_page: 100 }
   );
-
-  // repo 없는 이벤트(삭제/비공개 전환 등) 제거 + owner/name 없는 것도 제거
-  const all = events
+  let all = authEvents
     .map((e) => e?.repo)
     .filter((r) => r && r.owner && r.owner.login && r.name);
 
-  console.log("Starred repos fetched:", all.length);
+  console.log("[fetchStarred] authenticated stars:", all.length);
 
-  // 토픽 보강(상위 300개만)
+  // 2) 0건이면 공개 스타로 폴백
+  if (all.length === 0 && username) {
+    console.log("[fetchStarred] fallback → public stars of", username);
+    const pubs = await octokit.paginate(
+      octokit.activity.listReposStarredByUser,
+      { username, per_page: 100 }
+    );
+    all = pubs
+      .map((r) => r) // 이미 repo 객체
+      .filter((r) => r && r.owner && r.owner.login && r.name);
+    console.log("[fetchStarred] public stars fetched:", all.length);
+  }
+
+  // 3) 토픽 보강(상위 300개만). 실패해도 진행
   for (const r of all.slice(0, 300)) {
     try {
       const tr = await octokit.repos.getAllTopics({
-        owner: r.owner.login,
-        repo: r.name,
+        owner: r.owner.login, repo: r.name,
       });
       const names = Array.isArray(tr?.data?.names) ? tr.data.names : [];
       r.topics = Array.isArray(r.topics) ? r.topics : [];
@@ -87,10 +95,11 @@ async function fetchStarred() {
     }
   }
 
-  return all; // ← 반드시 반환!
+  console.log("[fetchStarred] sample:", all.slice(0, 5).map(r => `${r.owner.login}/${r.name}`));
+  return all;
 }
 
-// ===== 렌더링 & 쓰기 =====
+// ===== 렌더 & 쓰기 =====
 function renderHome(groups) {
   const now = new Date().toISOString();
   let out = `# ⭐ Starred Repos (자동 생성)\n\n> 마지막 업데이트: ${now}\n\n`;
@@ -102,7 +111,6 @@ function renderHome(groups) {
   }
   return out + "\n";
 }
-
 function write(p, content) {
   // 디버깅 중 항상 변경 감지 원하면 아래 한 줄 주석 해제
   // content += `\n<!-- updated: ${new Date().toISOString()} -->\n`;
@@ -113,18 +121,21 @@ function write(p, content) {
 // ===== 메인 =====
 const main = async () => {
   console.log("== Stars → Wiki (ESM) ==");
+  if (!process.env.STAR_TOKEN) {
+    console.warn("[warn] STAR_TOKEN is empty; rate limit/visibility may be limited.");
+  }
+
   const me = await octokit.users.getAuthenticated();
   console.log("Authenticated as:", me.data.login);
 
-  const starred = await fetchStarred();
-  console.log("Starred:", starred.length);
+  const starred = await fetchStarred(me.data.login);
+  console.log("Starred (final count):", starred.length);
 
   const groups = {};
   for (const r of starred) {
     const cat = pickCategory(r);
     (groups[cat] ||= []).push(r);
   }
-  // 스타수 내림차순
   Object.values(groups).forEach((list) =>
     list.sort((a, b) => (b.stargazers_count || 0) - (a.stargazers_count || 0))
   );
@@ -141,7 +152,6 @@ const main = async () => {
     write(path.join(WIKI_DIR, "Home.md"), "# ⭐ Starred Repos\n\n(아직 항목이 없습니다)\n");
   }
 
-  // 생성물 요약
   const files = fs.readdirSync(WIKI_DIR).filter((f) => f.endsWith(".md"));
   console.log("Generated files:", files);
 };
