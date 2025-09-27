@@ -1,21 +1,24 @@
-// scripts/update-wiki.js — BASIC (no notes, no translation, no summary)
+// scripts/update-wiki.js — BASIC + notes + newline-title (ESM)
 import fs from "fs";
 import path from "path";
 import yaml from "js-yaml";
 import { Octokit } from "@octokit/rest";
 
-console.log("== Stars → Wiki (BASIC) ==");
+console.log("== Stars → Wiki (BASIC+NOTES) ==");
 
-const WIKI_DIR = "wiki";
+const WIKI_DIR   = "wiki";                                  // 위키 저장소 클론 위치
+const NOTES_DIR  = path.join(WIKI_DIR, "notes");            // 수동/자동 노트 저장 경로
+const TITLE_STYLE = (process.env.TITLE_STYLE || "inline")   // inline | newline
+  .toLowerCase();
+const NOTE_LABEL  = process.env.NOTE_LABEL || "노트";        // 전역 기본 링크 라벨
+const NOTE_EMOJI  = process.env.NOTE_EMOJI || "";           // 전역 기본 이모지(예: "📝")
+
 const octokit  = new Octokit({ auth: process.env.STAR_TOKEN });
 
 /* ---------------- utils ---------------- */
 const ensureDir = (d) => { if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true }); };
 const toFile    = (t) => t.replace(/[\/\\]/g, "-").replace(/\s+/g, "-");
 const write     = (p, content) => { fs.writeFileSync(p, content, "utf8"); console.log("WROTE:", p, content.length, "bytes"); };
-// 상단 옵션들 근처에 추가
-const TITLE_STYLE = (process.env.TITLE_STYLE || "inline").toLowerCase(); // inline | newline
-
 
 /* ---------------- lists.yml loader ---------------- */
 function loadListsConfig() {
@@ -31,6 +34,33 @@ function loadListsConfig() {
     return null;
   }
 }
+
+/* ---------------- notes.yml loader ---------------- */
+function loadUserNotes() {
+  const p = path.join("config", "notes.yml");
+  if (!fs.existsSync(p)) return {};
+  try {
+    const doc = yaml.load(fs.readFileSync(p, "utf8"));
+    const raw = doc?.notes || {};
+    const out = {};
+    for (const [k, v] of Object.entries(raw)) {
+      if (!v) continue;
+      out[k.toLowerCase()] = {
+        title:        String(v.title || "").trim(),
+        desc:         String(v.desc || "").trim(),
+        link:         String(v.link || "").trim(),
+        link_label:   String(v.link_label || "").trim(), // per-repo 라벨(이모지 포함 가능)
+        show_original: !!v.show_original,
+      };
+    }
+    console.log(`[notes.yml] loaded: ${Object.keys(out).length}`);
+    return out;
+  } catch (e) {
+    console.warn("[notes.yml] parse error:", e?.message);
+    return {};
+  }
+}
+const USER_NOTES = loadUserNotes();
 
 /* ---------------- fallback categories ---------------- */
 const FALLBACK_CATS = [
@@ -58,7 +88,6 @@ const KEYWORDS = {
   "확장 & 기타 (Extensions & Others)": ["mlxtend","extension","helper","toolkit","snk","gitanimals","build-your-own-x"],
 };
 const UNC = "기타 / 미분류";
-
 function pickFallbackCategory(repo) {
   const hay = `${repo?.name ?? ""} ${repo?.description ?? ""}`.toLowerCase();
   const topics = Array.isArray(repo?.topics) ? repo.topics.map(t => String(t).toLowerCase()) : [];
@@ -129,55 +158,26 @@ function renderHomeFromGroups(groups, order) {
   return out + "\n";
 }
 
-function lineOf(r) {
-  const id   = `${r.owner.login}/${r.name}`.toLowerCase();
-  const note = USER_NOTES[id];
+/* ---------------- notes helpers ---------------- */
+function ensureNoteFile(absPath, title = "Notes", repoUrl = "") {
+  // 존재하면 그대로 보존(덮어쓰기 금지)
+  if (fs.existsSync(absPath)) return;
+  ensureDir(path.dirname(absPath));
+  const body = `# ${title}
 
-  const label = `${r.owner.login} / ${r.name}`;
-  const link  = `[${label}](${r.html_url})`;
-  const desc  = getDescWithNote(r);
-  const star  = r.stargazers_count ? `  ⭐ ${r.stargazers_count}` : "";
-  const noteLink = note?.link ? ` · [노트](${note.link})` : "";
+**Why I starred**
+- 
 
-  if (note?.title && TITLE_STYLE === "newline") {
-    // 원하는 출력:
-    // - **제목**
-    //   owner / repo — 원문 · 메모 · [노트]  ⭐
-    return `- **${note.title}**\n  ${link} — ${desc}${noteLink}${star}`;
-  } else {
-    // 한 줄(INLINE) 스타일
-    return `- ${link} — ${desc}${noteLink}${star}`;
-  }
+**Usage / Tips**
+- 
+
+**Links**
+- ${repoUrl}
+`;
+  fs.writeFileSync(absPath, body, "utf8");
 }
-/* ---------------- note ---------------- */
 
-function loadUserNotes() {
-  const p = path.join("config", "notes.yml");
-  if (!fs.existsSync(p)) return {};
-  try {
-    const doc = yaml.load(fs.readFileSync(p, "utf8"));
-    const raw = doc?.notes || {};
-    const out = {};
-    for (const [k, v] of Object.entries(raw)) {
-      if (!v) continue;
-      out[k.toLowerCase()] = {
-        title: String(v.title || "").trim(),
-        desc: String(v.desc || "").trim(),
-        link: String(v.link || "").trim(),
-        show_original: !!v.show_original,
-      };
-    }
-    console.log(`[notes.yml] loaded: ${Object.keys(out).length}`);
-    return out;
-  } catch (e) {
-    console.warn("[notes.yml] parse error:", e?.message);
-    return {};
-  }
-}
-const USER_NOTES = loadUserNotes();
-
-
-/* ---------------- 설명 합치기 ---------------- */
+/* ---------------- description builder ---------------- */
 function getDescWithNote(repo) {
   const id   = `${repo.owner.login}/${repo.name}`.toLowerCase();
   const note = USER_NOTES[id];
@@ -193,8 +193,37 @@ function getDescWithNote(repo) {
   return topics ? `Key topics: ${topics}` : `No description provided.`;
 }
 
+/* ---------------- one-line / two-line builder ---------------- */
+function lineOf(r) {
+  const id   = `${r.owner.login}/${r.name}`.toLowerCase();
+  const note = USER_NOTES[id];
 
+  const label = `${r.owner.login} / ${r.name}`;
+  const link  = `[${label}](${r.html_url})`;
+  const desc  = getDescWithNote(r);
+  const star  = r.stargazers_count ? `  ⭐ ${r.stargazers_count}` : "";
 
+  // 노트 링크 준비(+ 필요 시 템플릿 파일 1회 자동 생성)
+  let notePart = "";
+  if (note?.link) {
+    const abs = path.isAbsolute(note.link) ? note.link : path.join(WIKI_DIR, note.link);
+    const titleForNote = note?.title || `${r.name} — Notes`;
+    ensureNoteFile(abs, titleForNote, r.html_url);
+
+    const labelText = (note.link_label && note.link_label.trim())
+      ? note.link_label.trim()
+      : `${NOTE_EMOJI ? NOTE_EMOJI + " " : ""}${NOTE_LABEL}`;
+    notePart = ` · [${labelText}](${note.link})`;
+  }
+
+  if (note?.title && TITLE_STYLE === "newline") {
+    // 2줄 스타일
+    return `- **${note.title}**\n  ${link} — ${desc}${notePart}${star}`;
+  } else {
+    // 1줄 스타일
+    return `- ${link} — ${desc}${notePart}${star}`;
+  }
+}
 
 /* ---------------- main ---------------- */
 const main = async () => {
@@ -241,6 +270,8 @@ const main = async () => {
   );
 
   ensureDir(WIKI_DIR);
+  ensureDir(NOTES_DIR);
+
   const order = (listsCfg && listsCfg.length)
     ? [...listsCfg.map(l => l.name), UNC]
     : [...FALLBACK_CATS, UNC];
