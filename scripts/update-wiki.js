@@ -1,11 +1,10 @@
-// scripts/update-wiki.js — BASIC+TITLE+NOTES (no translation/summarization)
+// scripts/update-wiki.js — BASIC (no translation/summarization)
 import fs from "fs";
 import path from "path";
 import yaml from "js-yaml";
 import { Octokit } from "@octokit/rest";
 
-
-console.log("[BOOT] update-wiki.js BASIC+TITLE+NOTES");
+console.log("[BOOT] update-wiki.js BASIC");
 
 const WIKI_DIR = "wiki"; // ./wiki 에 Wiki 저장소를 clone 해 둔다
 const octokit  = new Octokit({ auth: process.env.STAR_TOKEN });
@@ -30,7 +29,7 @@ function loadListsConfig() {
   }
 }
 
-// notes.yml: title/desc/emoji/tags/link/pin/order/category/lists/hide_star/show_original
+// notes.yml: title/desc/emoji/tags/link/pin/order/category/lists/hide_star
 function loadUserNotes() {
   const p = path.join("config", "notes.yml");
   if (!fs.existsSync(p)) return {};
@@ -51,7 +50,6 @@ function loadUserNotes() {
         category: String(v.category || "").trim(),
         lists: Array.isArray(v.lists) ? v.lists.map(String) : [],
         hide_star: !!v.hide_star,
-        show_original: !!v.show_original,
       };
     }
     console.log(`[notes.yml] loaded: ${Object.keys(out).length}`);
@@ -63,10 +61,11 @@ function loadUserNotes() {
 }
 const USER_NOTES = loadUserNotes();
 
-/* ─────────────── notes pages (wiki/notes/*.md) ─────────────── */
+/* ─────────────── wiki notes pages (wiki/notes/*.md) ─────────────── */
 const NOTES_DIR = path.join(WIKI_DIR, "notes");
 const AUTO_NOTE_PAGE = (process.env.AUTO_NOTE_PAGE ?? "true").toLowerCase() === "true";
 const NOTE_FIRSTLINE = (process.env.NOTE_FIRSTLINE ?? "true").toLowerCase() === "true"; // 기본 true 권장
+const TITLE_STYLE    = (process.env.TITLE_STYLE ?? "inline").toLowerCase();             // inline | newline
 
 const noteSlug = (owner, repo) =>
   `${owner}--${repo}`.toLowerCase().replace(/[^a-z0-9._-]+/g, "-") + ".md";
@@ -228,20 +227,20 @@ async function getDesc(repo) {
   const id   = `${repo.owner.login}/${repo.name}`.toLowerCase();
   const note = USER_NOTES[id];
 
-  // (B) 노트 파일 첫 줄을 설명으로 사용 (옵션)
+  // 노트 첫 줄(옵션)
   if (NOTE_FIRSTLINE) {
     const p = ensureNotePage(repo);
     const first = p ? readNoteFirstLine(p) : "";
     if (first) return first;
   } else {
-    // NOTE_FIRSTLINE=false라도 링크를 위해 파일 생성은 해 둔다
+    // NOTE_FIRSTLINE=false라도 note 링크 위해 파일은 생성
     ensureNotePage(repo);
   }
 
-  // (A) notes.yml 의 설명
+  // notes.yml의 설명
   if (note?.desc) return note.desc;
 
-  // 레포 영문 description
+  // 레포 description
   const original = (repo?.description || "").replace(/\r?\n/g, " ").trim();
   if (original) return original;
 
@@ -251,7 +250,7 @@ async function getDesc(repo) {
   return `No description provided.`;
 }
 
-// TITLE_STYLE: inline(기본) | newline
+// 한 줄 출력 (TITLE_STYLE: inline | newline)
 async function lineOfAsync(r) {
   const id   = `${r.owner.login}/${r.name}`.toLowerCase();
   const note = USER_NOTES[id];
@@ -265,17 +264,15 @@ async function lineOfAsync(r) {
   const extra = note?.link ? `  · [link](${note.link})` : "";
   const star  = note?.hide_star ? "" : (r.stargazers_count ? `  ⭐ ${r.stargazers_count}` : "");
 
-  const title = (note?.title || "").trim();
-  const style = (process.env.TITLE_STYLE || "inline").toLowerCase();
-
-  // note 링크 (파일은 ensureNotePage()에서 생성/보존)
+  // note 링크
   let notePart = "";
   const p = noteFileFor(r.owner.login, r.name);
   if (AUTO_NOTE_PAGE && fs.existsSync(p)) {
     notePart = `  · [note](notes/${path.basename(p)})`;
   }
 
-  if (title && style === "newline") {
+  const title = (note?.title || "").trim();
+  if (title && TITLE_STYLE === "newline") {
     return `- ${emoji}**${title}**\n  ${link} — ${desc}${tags}${extra}${notePart}${star}`;
   } else {
     const titlePart = title ? `**${title}** · ` : "";
@@ -285,7 +282,7 @@ async function lineOfAsync(r) {
 
 /* ─────────────── main ─────────────── */
 const main = async () => {
-  console.log("== Stars → Wiki (BASIC+TITLE+NOTES) ==");
+  console.log("== Stars → Wiki (BASIC) ==");
   const me = await octokit.users.getAuthenticated();
   console.log("Authenticated as:", me.data.login);
 
@@ -296,7 +293,7 @@ const main = async () => {
   const groups = {};
 
   if (listsCfg && listsCfg.length) {
-    // 규칙 기반 + notes.lists로 추가 노출, 미매칭은 폴백 카테고리로 자동 분배
+    // 규칙 기반 + notes.lists 추가, 미매칭은 폴백 카테고리로 자동 분배
     for (const r of starred) {
       let hit = 0;
       for (const rule of listsCfg) {
@@ -324,7 +321,7 @@ const main = async () => {
       }
     }
 
-    // Home 순서: lists.yml에 정의된 순서 + 실제 생성된 폴백 카테고리 + UNC(있으면)
+    // Home 순서: lists.yml 순서 + 실제 생성된 폴백 카테고리 + UNC(있을 때만)
     const prefer = listsCfg.map(l => l.name);
     const extra  = Object.keys(groups).filter(k => !prefer.includes(k) && k !== UNC);
     var order    = [...prefer, ...extra, ...(groups[UNC]?.length ? [UNC] : [])];
