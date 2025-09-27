@@ -1,0 +1,116 @@
+lists:
+  - name: "확장 & 기타 (Extensions & Others)"
+    repos: []
+    include_keywords:
+      [ "extension","browser extension","chrome extension","firefox add-on","tampermonkey","greasemonkey",
+        "helper","toolkit","utilities","utility","cli tool","snk","gitanimals","badge","widget" ]
+    include_topics: [ "browser-extension","chrome-extension","firefox","plugin","utilities","cli" ]
+    exclude_keywords: []
+
+  - name: "자동화 (Automation)"
+    repos: []
+    include_keywords:
+      [ "github actions","action","actions","workflow","workflows","ci","cd","ci/cd","pipeline",
+        "dependabot","renovate","semantic-release","release please","lefthook","pre-commit",
+        "lint-staged","husky","taskfile","makefile","nektos","actions-runner-controller",
+        "self-hosted runner","automation","cron","scheduler","opencode","codemod","resumable" ]
+    include_topics:
+      [ "actions","github-actions","automation","ci","cd","cicd","devops","gh-actions","runner","workflow" ]
+    exclude_keywords: []
+
+  - name: "웹 & 프론트엔드 (Web & Frontend)"
+    repos: []
+    include_keywords:
+      [ "react","preact","next","next.js","vue","nuxt","nuxt.js","svelte","sveltekit","astro","solidjs","qwik","lit",
+        "angular","rxjs","vite","webpack","rollup","esbuild","parcel",
+        "tailwind","tailwindcss","shadcn","mui","material ui","chakra ui","ant design","mantine","radix","headlessui",
+        "storybook","design system","ui kit","component library",
+        "react-hook-form","zod","tanstack","router","trpc",
+        "graphql","apollo","urql",
+        "styled-components","emotion","vanilla-extract","sass","postcss",
+        "eslint","prettier","jest","vitest","playwright","cypress","puppeteer",
+        "rrweb","reveal","liquid-glass","base-ui","magicui","ai-elements","image-url","darkmode","ts-brand","lenses","velite","orval" ]
+    include_topics:
+      [ "react","nextjs","vue","nuxt","svelte","sveltekit","astro","solid","qwik","lit",
+        "tailwindcss","css","web-components","frontend","web","typescript","javascript","design-system","storybook" ]
+    exclude_keywords: []
+
+  - name: "인공지능 / 머신러닝 (AI / ML)"
+    repos: []
+    include_keywords:
+      [ "pytorch","tensorflow","keras","jax","flax","onnx","onnxruntime","openvino",
+        "xgboost","lightgbm","catboost","sklearn","scikit-learn",
+        "huggingface","transformers","diffusers","datasets","accelerate","trl","peft","lora","qlora","flash-attn","vllm","gguf",
+        "llama","mistral","qwen","gemma","llava","whisper","wav2vec","rnnt","tts",
+        "langchain","llamaindex","autogen","autogpt","crewai","smolagents","semantic-kernel",
+        "rag","vector db","milvus","qdrant","weaviate","faiss","chromadb",
+        "mlflow","wandb","clearml","evidence",
+        "finetune","ner","generate-sequences","verifiers","marimo","kbla","execu","simpletuner","lotus","orbital","agent" ]
+    include_topics:
+      [ "machine-learning","deep-learning","ml","ai","llm","nlp","cv","computer-vision","speech","tts","asr",
+        "generative-ai","diffusion-models","rag","vector-database","model-serving","inference" ]
+    exclude_keywords: []
+
+  - name: "리소스 / 자료 모음 (Resources)"
+    repos: []
+    include_keywords:
+      [ "awesome","awesome-","curated","curated list","papers","paper notes","paper-notes",
+        "cheatsheet","cookbook","handbook","guide","guides","examples","sample","reference",
+        "roadmap","collection","gallery","book","profile-readme","devteam","dev-conf-replay" ]
+    include_topics:
+      [ "awesome","list","awesome-list","resources","roadmap","cheatsheet","guide","handbook","examples" ]
+    exclude_keywords: []
+
+  - name: "학습 & 스터디 (Learning & Study)"
+    repos: []
+    include_keywords:
+      [ "course","courses","lecture","lectures","workshop","bootcamp","mooc","study","study plan","study-plan",
+        "notes","lecture notes","slides","tutorial","tutorials","lab","labs","exercise","exercises",
+        "textbook","practice","examples","qandai","stat453","retreat" ]
+    include_topics:
+      [ "education","learning","course","lecture","tutorial","notes","workshop" ]
+    exclude_keywords: []
+
+  - name: "디자인 & AI 연동 (Design & AI Integration)"
+    repos: []
+    include_keywords:
+      [ "figma","figma plugin","figma plugin","design tokens","design system","design kit","ui kit",
+        "framer","sketch","adobe xd","radix","shadcn","context" ]
+    include_topics:
+      [ "figma","figma-plugin","design","design-system","design-tokens","prototyping" ]
+    exclude_keywords: []
+
+  - name: "백엔드 & 런타임 (Backend & Runtime)"
+    repos: []
+    include_keywords:
+      [ "node","nodejs","express","fastify","koa","nest","hono",
+        "bun","deno","cloudflare workers","workers","vercel edge","edge runtime",
+        "serverless","lambda","api","grpc","openapi","swagger",
+        "prisma","typeorm","drizzle","knex","trpc","graphql","rest" ]
+    include_topics:
+      [ "backend","server","api","runtime","serverless","edge-computing","cloudflare-workers",
+        "deno","bun","nodejs","express","openapi","graphql" ]
+    exclude_keywords: []
+
+  - name: "시각화 & 도구 (Visualization & Tool)"
+    repos: []
+    include_keywords:
+      [ "matplotlib","seaborn","plotly","altair","vega","vega-lite","echarts","d3","d3.js","chart.js","charts",
+        "mermaid","excalidraw","graphviz","diagram","flowchart","timeline","heatmap","dataviz","fastplotlib","watermark","plot" ]
+    include_topics:
+      [ "visualization","data-visualization","plotting","charts","diagram","graph","graphviz","mermaid","d3","echarts" ]
+    exclude_keywords: []
+
+  - name: "데이터 & 처리 (Data & Processing)"
+    repos: []
+    include_keywords:
+      [ "pandas","numpy","polars","arrow","pyarrow","duckdb","sqlite","postgres","postgresql","mysql",
+        "spark","pyspark","dask","ray","airflow","prefect","dbt","kafka","flink","beam",
+        "etl","elt","pipeline","orchestration",
+        "parquet","orc","delta lake","iceberg","hudi",
+        "warehouse","bigquery","snowflake","redshift",
+        "dataset","sklearn","notebook","lotus","orbital","matplotlib" ]
+    include_topics:
+      [ "data","dataset","data-engineering","database","sql","etl","elt","big-data","pandas","numpy","polars",
+        "duckdb","parquet","spark","airflow","prefect","dbt" ]
+    exclude_keywords: []
