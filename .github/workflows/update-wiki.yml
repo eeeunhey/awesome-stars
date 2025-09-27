@@ -1,0 +1,47 @@
+name: Update Wiki from Stars
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 15 * * 1"  # 매주 월요일 00:00 KST (UTC 15:00)
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install deps
+        run: npm i
+
+      - name: Clone wiki repo
+        run: |
+          git clone "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git" wiki
+          ls -la wiki || true
+
+      - name: Generate wiki pages
+        env:
+          STAR_TOKEN: ${{ secrets.STAR_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: npm run update:wiki
+
+      - name: Commit & push to Wiki
+        working-directory: wiki
+        run: |
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor }}@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes."
+          else
+            git commit -m "chore(wiki): auto-update from stars [skip ci]"
+            git push origin HEAD
+          fi

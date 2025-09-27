@@ -1,0 +1,20 @@
+# config/categories.yml
+categories:
+  - key: web
+    name: "웹 & 프론트엔드"
+    keywords: [react, nextjs, material-ui, mui, tailwind, shadcn]
+  - key: ai
+    name: "인공지능 / 머신러닝"
+    keywords: [pytorch, llm, rag, deep-learning, gemma, huggingface]
+  - key: data
+    name: "데이터 & 처리"
+    keywords: [sql, pandas, notebook, marimo, lotus]
+  - key: devtools
+    name: "개발 도구 / 자동화"
+    keywords: [github-actions, ci, cd, eslint, git, n8n]
+  - key: mobile
+    name: "모바일"
+    keywords: [react-native, swift]
+  - key: resources
+    name: "리소스 / 학습"
+    keywords: [awesome, book, course, tutorial]
