@@ -43,6 +43,7 @@ const lineOf = (r) => {
   return `- [${full}](${r.html_url}) — ${desc}${stars ? `  ⭐ ${stars}` : ""}`;
 };
 
+// ===== 안전한 분류 =====
 function pickCategory(repo) {
   const hay = `${repo?.name ?? ""} ${repo?.description ?? ""}`.toLowerCase();
   const topics = Array.isArray(repo?.topics)
@@ -57,35 +58,36 @@ function pickCategory(repo) {
 
 // ===== 스타 가져오기 (인증 → 0건이면 공개 스타 폴백) =====
 async function fetchStarred(username) {
-  // 1) 인증 사용자 기준(비공개 포함 가능)
-  const authEvents = await octokit.paginate(
+  // ✅ 이 엔드포인트들은 "레포 객체 배열"을 바로 반환합니다 (x.repo 아님!)
+  const authRepos = await octokit.paginate(
     octokit.activity.listReposStarredByAuthenticatedUser,
     { per_page: 100 }
   );
-  let all = authEvents
-    .map((e) => e?.repo)
-    .filter((r) => r && r.owner && r.owner.login && r.name);
+  let all = (authRepos ?? []).filter(
+    (r) => r && r.owner && r.owner.login && r.name
+  );
+  console.log("[fetchStarred] authenticated repos:", all.length);
 
-  console.log("[fetchStarred] authenticated stars:", all.length);
-
-  // 2) 0건이면 공개 스타로 폴백
   if (all.length === 0 && username) {
     console.log("[fetchStarred] fallback → public stars of", username);
-    const pubs = await octokit.paginate(
+    const publicRepos = await octokit.paginate(
       octokit.activity.listReposStarredByUser,
       { username, per_page: 100 }
     );
-    all = pubs
-      .map((r) => r) // 이미 repo 객체
-      .filter((r) => r && r.owner && r.owner.login && r.name);
-    console.log("[fetchStarred] public stars fetched:", all.length);
+    all = (publicRepos ?? []).filter(
+      (r) => r && r.owner && r.owner.login && r.name
+    );
+    console.log("[fetchStarred] public repos:", all.length);
   }
 
-  // 3) 토픽 보강(상위 300개만). 실패해도 진행
-  for (const r of all.slice(0, 300)) {
+  // 토픽 보강(상위 300개만). 실패/권한 이슈여도 계속 진행
+  for (let i = 0; i < Math.min(all.length, 300); i++) {
+    const r = all[i];
+    if (!r?.owner?.login || !r?.name) continue;
     try {
       const tr = await octokit.repos.getAllTopics({
-        owner: r.owner.login, repo: r.name,
+        owner: r.owner.login,
+        repo: r.name,
       });
       const names = Array.isArray(tr?.data?.names) ? tr.data.names : [];
       r.topics = Array.isArray(r.topics) ? r.topics : [];
