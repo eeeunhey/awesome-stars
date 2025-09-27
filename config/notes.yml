@@ -1,12 +1,14 @@
 notes:
   "n8n-io/n8n":
     title: "n8n — 내가 쓰는 자동화 허브"
-    desc: "메모: 반복 작업을 시각적 플로우 + 코드로 빠르게 자동화."
-    show_original: true           # 원문 설명 + 메모를 같이 출력
-    link: "./notes/n8n.md"        # 노트 MD(위키 저장소 안 경로)
+    desc:  ""               # 한줄 메모(없어도 됨, 그래도 '· 메모:'는 표시)
+    link:  "notes/n8n.md"   # 클릭 시 열릴 노트 파일(자동 템플릿 생성)
+    link_label: ""          # 라벨을 개별 커스텀하고 싶으면(예: "📓 노트")
+    show_original: true     # true면 GitHub 영문 설명 뒤에 '· desc'를 붙여 보여줌
 
   "mui/material-ui":
     title: "Material UI 빠른 컴포넌트 킷"
-    desc: ""                      # 공란이면 원문 설명만 사용
+    desc:  ""
+    link:  "notes/material-ui.md"
+    link_label: ""
     show_original: true
-    link: "./notes/material-ui.md"

@@ -3,7 +3,7 @@ name: Update Wiki from Stars
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 15 * * *"  # 매일 00:00 KST (UTC 15:00)
+    - cron: "0 15 * * *"  # 매일 00:00 KST(= UTC 15:00)
 
 jobs:
   run:
@@ -11,7 +11,7 @@ jobs:
     permissions:
       contents: write
     env:
-      WIKI_REMOTE: https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/eeeunhey/awesome-stars.wiki.git
+      WIKI_REMOTE: https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git
 
     steps:
       - name: Checkout repo
@@ -37,31 +37,26 @@ jobs:
           echo "Wiki branch: $(git rev-parse --abbrev-ref HEAD || echo master)"
           ls -al
 
-      # 1) 먼저 정리 (notes/만 보존)
-      - name: Cleanup old root pages (keep notes/)
+      # ✅ notes/만 보존하고 과거 페이지 싹 정리 (트래킹/미트래킹 전체)
+      - name: Hard clean wiki (keep notes/)
         working-directory: wiki
         shell: bash
         run: |
-          # 루트의 *.md 삭제 (특수 페이지/notes 보존)
-          find . -maxdepth 1 -type f -name '*.md' \
-            -not -name 'Home.md' \
-            -not -name '_Sidebar.md' \
-            -not -name '_Footer.md' \
-            -not -name '_Header.md' \
-            -delete
+          set -e
+          if [ -d notes ]; then tar -czf /tmp/notes.tgz notes; fi
+          git ls-files -z | xargs -0 -r git rm -f || true
+          git clean -fdx -e notes
+          if [ -f /tmp/notes.tgz ]; then tar -xzf /tmp/notes.tgz; fi
+          echo "Hard clean done. (kept: notes/)"
 
-          # notes/ 외의 폴더 제거 (과거 잘못 만든 레포별 폴더 정리)
-          find . -maxdepth 1 -type d \
-            -not -name '.' -not -name '.git' -not -name 'notes' -exec rm -rf {} +
-
-      # 2) 새 페이지 생성
       - name: Generate wiki pages (write into ./wiki)
         env:
           STAR_TOKEN: ${{ secrets.STAR_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          TITLE_STYLE: newline          # 제목을 윗줄, 링크/설명은 아랫줄
-          NOTE_LABEL: "노트"            # 노트 링크 라벨 (이모지와 조합됨)
-          NOTE_EMOJI: "📝"               # 링크 앞에 붙일 이모지
+          TITLE_STYLE: newline          # 제목 윗줄, 링크/설명은 아랫줄
+          NOTE_LABEL: "노트"            # 노트 링크 라벨
+          NOTE_EMOJI: "📝"
+          MEMO_PLACEHOLDER: ""          # 메모가 없을 때 '메모:' 뒤에 넣을 플레이스홀더(원하면 "없음" 등)
         run: node scripts/update-wiki.js
 
       - name: Preview generated files
