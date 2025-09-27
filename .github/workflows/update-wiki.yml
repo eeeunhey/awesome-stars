@@ -20,7 +20,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20   # 👈 cache 제거
+          node-version: 20
 
       - name: Install deps
         run: |
@@ -36,6 +36,18 @@ jobs:
           cd wiki
           echo "Wiki branch: $(git rev-parse --abbrev-ref HEAD || echo master)"
           ls -al
+
+      # ✅ 예전 개별 레포 페이지(.md) 전부 정리
+      #   보존할 파일이 있다면 아래에서 --exclude 패턴으로 제외하세요.
+      - name: Clean old wiki pages
+        working-directory: wiki
+        shell: bash
+        run: |
+          # 추적 중인 md 파일까지 삭제로 stage
+          git rm -r --ignore-unmatch *.md || true
+          git rm -r --ignore-unmatch */*.md || true
+          # 비어있는 디렉터리 정리
+          find . -type d -empty -not -path './.git' -delete
 
       - name: Generate wiki pages (write into ./wiki)
         env:
@@ -59,7 +71,7 @@ jobs:
           if git diff --cached --quiet; then
             echo "No changes."
           else
-            git commit -m "chore(wiki): auto-update from stars [skip ci]"
+            git commit -m "chore(wiki): clean & rebuild from stars [skip ci]"
             BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo master)
             git push origin "$BRANCH"
           fi
