@@ -37,27 +37,34 @@ jobs:
           echo "Wiki branch: $(git rev-parse --abbrev-ref HEAD || echo master)"
           ls -al
 
-      # ✅ notes/만 보존하고 과거 페이지 싹 정리 (트래킹/미트래킹 전체)
+      # 1) notes/만 남기고 wiki 루트 전체 강제 청소
       - name: Hard clean wiki (keep notes/)
         working-directory: wiki
         shell: bash
         run: |
           set -e
-          if [ -d notes ]; then tar -czf /tmp/notes.tgz notes; fi
-          git ls-files -z | xargs -0 -r git rm -f || true
-          git clean -fdx -e notes
-          if [ -f /tmp/notes.tgz ]; then tar -xzf /tmp/notes.tgz; fi
-          echo "Hard clean done. (kept: notes/)"
+          # 숨김 포함, 확장 글로브
+          shopt -s extglob dotglob
+          # .git, notes/만 남기고 전부 삭제 + git rm으로 추적 제거
+          for f in *; do
+            if [[ "$f" != ".git" && "$f" != "notes" ]]; then
+              rm -rf "$f"
+              git rm -rf --ignore-unmatch "$f" || true
+            fi
+          done
+          # 혹시 남은 빈 디렉터리 정리
+          find . -type d -empty -not -path './.git' -not -path './notes' -delete
+
 
       - name: Generate wiki pages (write into ./wiki)
         env:
           STAR_TOKEN: ${{ secrets.STAR_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          TITLE_STYLE: newline          # 제목 윗줄, 링크/설명은 아랫줄
-          NOTE_LABEL: "노트"            # 노트 링크 라벨
+          TITLE_STYLE: newline
+          NOTE_LABEL: "노트"
           NOTE_EMOJI: "📝"
-          MEMO_PLACEHOLDER: ""          # 메모가 없을 때 '메모:' 뒤에 넣을 플레이스홀더(원하면 "없음" 등)
         run: node scripts/update-wiki.js
+
 
       - name: Preview generated files
         run: |
