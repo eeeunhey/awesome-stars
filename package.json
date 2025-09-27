@@ -2,9 +2,7 @@
   "name": "star-wiki",
   "private": true,
   "type": "module",
-  "scripts": {
-    "update:wiki": "node scripts/update-wiki.js"
-  },
+"scripts": { "update:wiki": "node scripts/update-wiki.cjs" },
   "dependencies": {
     "@octokit/rest": "^21.0.0",
     "js-yaml": "^4.1.0"

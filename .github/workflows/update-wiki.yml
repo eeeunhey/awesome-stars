@@ -10,8 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-
     env:
+      # 위키 저장소를 명시적으로 지정
       WIKI_REMOTE: https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/eeeunhey/awesome-stars.wiki.git
 
     steps:
@@ -22,48 +22,46 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
 
       - name: Install deps
-        run: npm i @octokit/rest
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm i
+          fi
 
-      - name: Generate wiki pages
+      - name: Clone wiki repo (into ./wiki)
+        run: |
+          git clone "${WIKI_REMOTE}" wiki
+          cd wiki
+          echo "Wiki branch: $(git rev-parse --abbrev-ref HEAD || echo master)"
+          ls -al
+
+      - name: Generate wiki pages (write into ./wiki)
         env:
           STAR_TOKEN: ${{ secrets.STAR_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: node scripts/update-wiki.js
 
-      # === 디버그: 생성물 확인 (여기서 파일 없으면 실패 처리) ===
-      - name: List generated wiki files
+      - name: Preview generated files
         run: |
-          echo "===== wiki dir ====="
-          if [ -d wiki ]; then ls -al wiki; else echo "wiki dir NOT FOUND"; fi
-          FILES=$(ls wiki/*.md 2>/dev/null | wc -l || true)
-          echo "MD files: $FILES"
-          if [ "$FILES" -eq 0 ]; then
-            echo "::error ::No wiki files were generated. Check scripts/update-wiki.js"
-            exit 1
-          fi
-          head -n 20 wiki/Home.md || true
+          echo "===== wiki/ ====="
+          ls -al wiki || true
+          echo "----- Home.md preview -----"
+          head -n 30 wiki/Home.md || true
 
-      - name: Clone wiki repo
+      - name: Commit & push to Wiki
+        working-directory: wiki
         run: |
-          git clone "${WIKI_REMOTE}" wiki-repo
-          echo "===== wiki-repo dir ====="; ls -al wiki-repo || true
-
-      - name: Copy pages and push to wiki
-        run: |
-          cp -f wiki/*.md wiki-repo/ || true
-          cd wiki-repo
           git config user.name  "${{ github.actor }}"
           git config user.email "${{ github.actor }}@users.noreply.github.com"
-          echo "===== git status BEFORE ====="; git status
           git add -A
-          # 위키 기본 브랜치는 보통 master이지만 환경에 따라 다를 수 있으므로 감지 후 푸시
-          BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo master)
           if git diff --cached --quiet; then
-            echo "::notice ::No changes to commit."
+            echo "No changes."
           else
             git commit -m "chore(wiki): auto-update from stars [skip ci]"
+            BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo master)
             git push origin "$BRANCH"
           fi
-          echo "===== git status AFTER ====="; git status
