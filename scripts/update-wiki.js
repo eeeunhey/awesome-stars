@@ -98,21 +98,31 @@ function pickFallbackCategory(repo) {
   return UNC;
 }
 
-/* ─────────────⭐ 핵심: 응답 정규화 + 안전한 fetch ───────────── */
-/** 리스트/유저 API 응답을 레포 객체 배열로 정규화 */
+
+
+// ✅ listReposStarredByAuthenticatedUser / listReposStarredByUser
+// 어떤 형태가 와도 "레포 객체 배열"로 통일
 function normalizeStarItems(items) {
-  return (items ?? [])
-    .map(it => (it && it.repo) ? it.repo : it)       // star 이벤트(e.repo)면 repo만 꺼내고, 이미 레포면 그대로
+  if (!Array.isArray(items)) return [];
+  return items
+    .map(it => (it && it.repo) ? it.repo : it) // e.repo 형태면 repo만 추출
     .filter(r => r && r.owner && r.owner.login && r.name);
 }
 
 /** 인증 스타 → 0건이면 공개 스타 폴백. topics는 "새 객체"에 채워서 반환 */
+
+// ✅ 인증 → 0건이면 공개 스타 폴백
+// ✅ "원본 r"을 절대 수정하지 않고, 새 객체에 topics를 넣어 반환
+// ✅ for-of로 순회(인덱스 접근 중간에 hole이 있어도 안전)
 async function fetchStarred(username) {
   // 1) 인증 사용자 기준
-  const authItems = await octokit.paginate(
+  let authItems = await octokit.paginate(
     octokit.activity.listReposStarredByAuthenticatedUser,
     { per_page: 100 }
-  );
+  ).catch(e => {
+    console.warn("[fetchStarred] auth paginate error:", e?.status || e?.message);
+    return [];
+  });
   let base = normalizeStarItems(authItems);
   console.log("[fetchStarred] authenticated repos:", base.length);
 
@@ -122,15 +132,18 @@ async function fetchStarred(username) {
     const pubItems = await octokit.paginate(
       octokit.activity.listReposStarredByUser,
       { username, per_page: 100 }
-    );
+    ).catch(e => {
+      console.warn("[fetchStarred] public paginate error:", e?.status || e?.message);
+      return [];
+    });
     base = normalizeStarItems(pubItems);
     console.log("[fetchStarred] public repos:", base.length);
   }
 
-  // 3) topics 보강(상위 300개만). 실패해도 계속 진행.
+  // 3) topics 보강(상위 300개만). 실패/권한 이슈여도 계속 진행.
   const out = [];
-  for (let i = 0; i < base.length; i++) {
-    const r = base[i];
+  let i = 0;
+  for (const r of base) {
     if (!r?.owner?.login || !r?.name) continue;
 
     let names = [];
@@ -141,11 +154,22 @@ async function fetchStarred(username) {
           repo: r.name,
         });
         names = Array.isArray(tr?.data?.names) ? tr.data.names : [];
-      } catch { /* ignore 404/권한/레이트리밋 */ }
+      } catch (e) {
+        // 404/권한/레이트리밋 등은 무시
+        names = [];
+      }
     }
 
-    // 원본을 건드리지 않고, 항상 topics 배열이 있는 "새 객체"로 반환
-    out.push({ ...r, topics: names });
+    // 🔸 원본 r을 건드리지 않고 새 객체로 반환 (topics는 항상 배열)
+    out.push({
+      owner: { login: r.owner.login },
+      name: r.name,
+      html_url: r.html_url,
+      description: r.description ?? "",
+      stargazers_count: r.stargazers_count ?? 0,
+      topics: names,
+    });
+    i++;
   }
 
   console.log("[fetchStarred] sample:", out.slice(0, 5).map(x => `${x.owner.login}/${x.name}`));
