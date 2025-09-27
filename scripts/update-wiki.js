@@ -1,12 +1,13 @@
-// scripts/update-wiki.js — BASIC+TITLE (no translation/summarization)
+// scripts/update-wiki.js — BASIC+TITLE+NOTES (no translation/summarization)
 import fs from "fs";
 import path from "path";
 import yaml from "js-yaml";
 import { Octokit } from "@octokit/rest";
 
-console.log("[BOOT] update-wiki.js BASIC+TITLE");
 
-const WIKI_DIR = "wiki";                         // ./wiki 에 Wiki 저장소를 clone 해 둔다
+console.log("[BOOT] update-wiki.js BASIC+TITLE+NOTES");
+
+const WIKI_DIR = "wiki"; // ./wiki 에 Wiki 저장소를 clone 해 둔다
 const octokit  = new Octokit({ auth: process.env.STAR_TOKEN });
 
 /* ─────────────── utils ─────────────── */
@@ -50,7 +51,7 @@ function loadUserNotes() {
         category: String(v.category || "").trim(),
         lists: Array.isArray(v.lists) ? v.lists.map(String) : [],
         hide_star: !!v.hide_star,
-        show_original: !!v.show_original, // (옵션) 영문 원문을 뒤에 병기할 때 사용
+        show_original: !!v.show_original,
       };
     }
     console.log(`[notes.yml] loaded: ${Object.keys(out).length}`);
@@ -61,6 +62,57 @@ function loadUserNotes() {
   }
 }
 const USER_NOTES = loadUserNotes();
+
+/* ─────────────── notes pages (wiki/notes/*.md) ─────────────── */
+const NOTES_DIR = path.join(WIKI_DIR, "notes");
+const AUTO_NOTE_PAGE = (process.env.AUTO_NOTE_PAGE ?? "true").toLowerCase() === "true";
+const NOTE_FIRSTLINE = (process.env.NOTE_FIRSTLINE ?? "true").toLowerCase() === "true"; // 기본 true 권장
+
+const noteSlug = (owner, repo) =>
+  `${owner}--${repo}`.toLowerCase().replace(/[^a-z0-9._-]+/g, "-") + ".md";
+
+function noteFileFor(owner, repo) {
+  return path.join(NOTES_DIR, noteSlug(owner, repo));
+}
+
+// 없으면 한 번만 생성. 이후 절대 덮어쓰지 않음.
+function ensureNotePage(repo) {
+  if (!AUTO_NOTE_PAGE) return null;
+  const p = noteFileFor(repo.owner.login, repo.name);
+  if (!fs.existsSync(p)) {
+    fs.mkdirSync(NOTES_DIR, { recursive: true });
+    fs.writeFileSync(
+      p,
+`# ${repo.owner.login} / ${repo.name} — Notes
+
+> 이 파일은 자동 생성되며, **수정 내용은 보존**됩니다. 스크립트가 덮어쓰지 않습니다.
+
+## Why I starred
+-
+
+## Usage / Tips
+-
+
+## Links
+- ${repo.html_url}
+`,
+      "utf8"
+    );
+  }
+  return p;
+}
+
+// 노트 파일의 첫 번째 “비어있지 않고 #으로 시작하지 않는” 줄
+function readNoteFirstLine(p) {
+  try {
+    const txt = fs.readFileSync(p, "utf8").replace(/\r/g, "");
+    const lines = txt.split("\n").map(l => l.trim()).filter(Boolean);
+    const first = lines.find(l => !l.startsWith("#"));
+    return first || "";
+  } catch {
+    return "";
+  }
+}
 
 /* ─────────────── fallback categories ─────────────── */
 const FALLBACK_CATS = [
@@ -176,10 +228,24 @@ async function getDesc(repo) {
   const id   = `${repo.owner.login}/${repo.name}`.toLowerCase();
   const note = USER_NOTES[id];
 
-  if (note?.desc) return note.desc; // 내가 적은 설명 우선
+  // (B) 노트 파일 첫 줄을 설명으로 사용 (옵션)
+  if (NOTE_FIRSTLINE) {
+    const p = ensureNotePage(repo);
+    const first = p ? readNoteFirstLine(p) : "";
+    if (first) return first;
+  } else {
+    // NOTE_FIRSTLINE=false라도 링크를 위해 파일 생성은 해 둔다
+    ensureNotePage(repo);
+  }
+
+  // (A) notes.yml 의 설명
+  if (note?.desc) return note.desc;
+
+  // 레포 영문 description
   const original = (repo?.description || "").replace(/\r?\n/g, " ").trim();
   if (original) return original;
 
+  // 토픽/기본 문구
   const topics = Array.isArray(repo?.topics) ? repo.topics.slice(0, 3).join(", ") : "";
   if (topics) return `Key topics: ${topics}`;
   return `No description provided.`;
@@ -202,18 +268,24 @@ async function lineOfAsync(r) {
   const title = (note?.title || "").trim();
   const style = (process.env.TITLE_STYLE || "inline").toLowerCase();
 
+  // note 링크 (파일은 ensureNotePage()에서 생성/보존)
+  let notePart = "";
+  const p = noteFileFor(r.owner.login, r.name);
+  if (AUTO_NOTE_PAGE && fs.existsSync(p)) {
+    notePart = `  · [note](notes/${path.basename(p)})`;
+  }
+
   if (title && style === "newline") {
-    // 윗줄: 제목, 아랫줄: 링크 — 설명 …
-    return `- ${emoji}**${title}**\n  ${link} — ${desc}${tags}${extra}${star}`;
+    return `- ${emoji}**${title}**\n  ${link} — ${desc}${tags}${extra}${notePart}${star}`;
   } else {
     const titlePart = title ? `**${title}** · ` : "";
-    return `- ${emoji}${titlePart}${link} — ${desc}${tags}${extra}${star}`;
+    return `- ${emoji}${titlePart}${link} — ${desc}${tags}${extra}${notePart}${star}`;
   }
 }
 
 /* ─────────────── main ─────────────── */
 const main = async () => {
-  console.log("== Stars → Wiki (BASIC+TITLE) ==");
+  console.log("== Stars → Wiki (BASIC+TITLE+NOTES) ==");
   const me = await octokit.users.getAuthenticated();
   console.log("Authenticated as:", me.data.login);
 
@@ -224,7 +296,7 @@ const main = async () => {
   const groups = {};
 
   if (listsCfg && listsCfg.length) {
-    // 규칙 기반 + notes.lists로 추가 노출
+    // 규칙 기반 + notes.lists로 추가 노출, 미매칭은 폴백 카테고리로 자동 분배
     for (const r of starred) {
       let hit = 0;
       for (const rule of listsCfg) {
@@ -245,8 +317,18 @@ const main = async () => {
         for (const name of note.lists) (groups[name] ||= []).push(r);
         hit = 1;
       }
-      if (hit === 0) (groups[UNC] ||= []).push(r);
+      if (hit === 0) {
+        const note2 = USER_NOTES[`${r.owner.login}/${r.name}`.toLowerCase()];
+        const cat   = note2?.category ? note2.category : pickFallbackCategory(r);
+        (groups[cat] ||= []).push(r);
+      }
     }
+
+    // Home 순서: lists.yml에 정의된 순서 + 실제 생성된 폴백 카테고리 + UNC(있으면)
+    const prefer = listsCfg.map(l => l.name);
+    const extra  = Object.keys(groups).filter(k => !prefer.includes(k) && k !== UNC);
+    var order    = [...prefer, ...extra, ...(groups[UNC]?.length ? [UNC] : [])];
+
   } else {
     // 키워드 폴백 + notes.category 강제
     for (const r of starred) {
@@ -254,6 +336,7 @@ const main = async () => {
       const cat = note?.category ? note.category : pickFallbackCategory(r);
       (groups[cat] ||= []).push(r);
     }
+    var order = [...FALLBACK_CATS, UNC];
   }
 
   // 정렬
@@ -261,7 +344,6 @@ const main = async () => {
 
   // 쓰기
   ensureDir(WIKI_DIR);
-  const order = (listsCfg && listsCfg.length) ? [...listsCfg.map(l => l.name), UNC] : [...FALLBACK_CATS, UNC];
   write(path.join(WIKI_DIR, "Home.md"), renderHomeFromGroups(groups, order));
 
   for (const name of order) {

@@ -1,59 +1,15 @@
 # config/notes.yml
-# 스키마
-# notes:
-#   <owner>/<repo>:
-#     desc: "내 설명(최우선)"
-#     emoji: "🔖"                 # 링크 앞 이모지
-#     tags: [tag1, tag2]         # 뒤에 `tag1` `tag2` 로 노출
-#     link: "https://docs..."     # 추가 문서/데모 링크
-#     pin: true                   # 그룹 최상단 고정
-#     order: 10                   # pin끼리 정렬(낮을수록 위)
-#     category: "카테고리 강제"     # lists.yml이 없을 때 강제 배치
-#     lists: ["리스트A", "리스트B"] # lists.yml 사용할 때 해당 리스트에도 중복 노출
-#     hide_star: false            # true면 ⭐ 숨김
-#     show_original: false        # true면 영문 원문 설명도 ‘ / ’로 병기
-
 notes:
   git-goods/gitanimals:
+    title: "프로필 펫 위젯"
     emoji: "🐾"
-    desc: "깃허브 활동으로 키우는 펫 위젯. 프로필/README에 붙여 동기부여!"
+    desc: "깃허브 활동으로 키우는 펫. README에 붙여 동기부여!"
     tags: [widget, fun]
     pin: true
     order: 1
-    category: "확장 & 기타 (Extensions & Others)"
 
   n8n-io/n8n:
+    title: "노/로코드 자동화"
     emoji: "⚙️"
-    desc: "시각적 빌더와 커스텀 코드가 가능한 워크플로 자동화. 자체 호스팅/클라우드, 400+ 통합."
+    desc: "시각적 빌더 + 커스텀 코드 워크플로 자동화. 자체 호스팅/클라우드, 400+ 통합."
     tags: [automation, workflow]
-    lists: ["자동화 (Automation)"]
-
-  mui/material-ui:
-    emoji: "🎨"
-    desc: "React용 Material Design UI 컴포넌트. 생산성/접근성/테마화에 강점."
-    tags: [react, ui]
-
-  actions/starter-workflows:
-    desc: "GitHub Actions 스타터 워크플로 모음."
-    tags: [actions, ci]
-    lists: ["자동화 (Automation)"]
-
-  actions/runner-images:
-    desc: "GitHub Actions 호스트 러너 이미지 정의."
-    tags: [actions, runner]
-    lists: ["자동화 (Automation)"]
-
-  nekos/act:
-    desc: "로컬에서 GitHub Actions를 실행하는 도구."
-    tags: [local, actions]
-    lists: ["자동화 (Automation)"]
-
-  sdra/awesome-actions:
-    desc: "GitHub Actions 관련 리소스 모음(awesome)."
-    tags: [awesome, actions]
-    lists: ["리소스 / 자료 모음 (Resources)"]
-
-  google-deepmind/gemma:
-    desc: "Google DeepMind의 오픈 웨이트 LLM."
-    tags: [llm, nlp]
-    lists: ["인공지능 / 머신러닝 (AI / ML)"]
