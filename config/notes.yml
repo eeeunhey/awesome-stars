@@ -1,0 +1,12 @@
+notes:
+  "n8n-io/n8n":
+    title: "n8n — 내가 쓰는 자동화 허브"
+    desc: "메모: 반복 작업을 시각적 플로우 + 코드로 빠르게 자동화."
+    show_original: true           # 원문 설명 + 메모를 같이 출력
+    link: "./notes/n8n.md"        # 노트 MD(위키 저장소 안 경로)
+
+  "mui/material-ui":
+    title: "Material UI 빠른 컴포넌트 킷"
+    desc: ""                      # 공란이면 원문 설명만 사용
+    show_original: true
+    link: "./notes/material-ui.md"

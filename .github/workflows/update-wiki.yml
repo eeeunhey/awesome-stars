@@ -53,6 +53,7 @@ jobs:
         env:
           STAR_TOKEN: ${{ secrets.STAR_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          TITLE_STYLE: newline 
         run: node scripts/update-wiki.js
 
       - name: Preview generated files

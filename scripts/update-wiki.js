@@ -13,6 +13,9 @@ const octokit  = new Octokit({ auth: process.env.STAR_TOKEN });
 const ensureDir = (d) => { if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true }); };
 const toFile    = (t) => t.replace(/[\/\\]/g, "-").replace(/\s+/g, "-");
 const write     = (p, content) => { fs.writeFileSync(p, content, "utf8"); console.log("WROTE:", p, content.length, "bytes"); };
+// 상단 옵션들 근처에 추가
+const TITLE_STYLE = (process.env.TITLE_STYLE || "inline").toLowerCase(); // inline | newline
+
 
 /* ---------------- lists.yml loader ---------------- */
 function loadListsConfig() {
@@ -127,11 +130,71 @@ function renderHomeFromGroups(groups, order) {
 }
 
 function lineOf(r) {
-  const full  = `${r.owner.login} / ${r.name}`;
-  const desc  = (r.description || "").replace(/\r?\n/g, " ").trim() || "No description provided.";
-  const stars = r.stargazers_count ?? 0;
-  return `- [${full}](${r.html_url}) — ${desc}${stars ? `  ⭐ ${stars}` : ""}`;
+  const id   = `${r.owner.login}/${r.name}`.toLowerCase();
+  const note = USER_NOTES[id];
+
+  const label = `${r.owner.login} / ${r.name}`;
+  const link  = `[${label}](${r.html_url})`;
+  const desc  = getDescWithNote(r);
+  const star  = r.stargazers_count ? `  ⭐ ${r.stargazers_count}` : "";
+  const noteLink = note?.link ? ` · [노트](${note.link})` : "";
+
+  if (note?.title && TITLE_STYLE === "newline") {
+    // 원하는 출력:
+    // - **제목**
+    //   owner / repo — 원문 · 메모 · [노트]  ⭐
+    return `- **${note.title}**\n  ${link} — ${desc}${noteLink}${star}`;
+  } else {
+    // 한 줄(INLINE) 스타일
+    return `- ${link} — ${desc}${noteLink}${star}`;
+  }
 }
+/* ---------------- note ---------------- */
+
+function loadUserNotes() {
+  const p = path.join("config", "notes.yml");
+  if (!fs.existsSync(p)) return {};
+  try {
+    const doc = yaml.load(fs.readFileSync(p, "utf8"));
+    const raw = doc?.notes || {};
+    const out = {};
+    for (const [k, v] of Object.entries(raw)) {
+      if (!v) continue;
+      out[k.toLowerCase()] = {
+        title: String(v.title || "").trim(),
+        desc: String(v.desc || "").trim(),
+        link: String(v.link || "").trim(),
+        show_original: !!v.show_original,
+      };
+    }
+    console.log(`[notes.yml] loaded: ${Object.keys(out).length}`);
+    return out;
+  } catch (e) {
+    console.warn("[notes.yml] parse error:", e?.message);
+    return {};
+  }
+}
+const USER_NOTES = loadUserNotes();
+
+
+/* ---------------- 설명 합치기 ---------------- */
+function getDescWithNote(repo) {
+  const id   = `${repo.owner.login}/${repo.name}`.toLowerCase();
+  const note = USER_NOTES[id];
+  const original = (repo?.description || "").replace(/\r?\n/g, " ").trim();
+
+  if (note?.desc && note?.show_original && original) {
+    return `${original} · ${note.desc}`;
+  }
+  if (note?.desc) return note.desc;
+  if (original) return original;
+
+  const topics = Array.isArray(repo?.topics) ? repo.topics.slice(0, 3).join(", ") : "";
+  return topics ? `Key topics: ${topics}` : `No description provided.`;
+}
+
+
+
 
 /* ---------------- main ---------------- */
 const main = async () => {
