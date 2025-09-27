@@ -1,18 +1,26 @@
-// scripts/update-wiki.js — BASIC (no translation/summarization)
+// scripts/update-wiki.js (ESM)
 import fs from "fs";
 import path from "path";
 import yaml from "js-yaml";
 import { Octokit } from "@octokit/rest";
 
-console.log("[BOOT] update-wiki.js BASIC");
-
-const WIKI_DIR = "wiki"; // ./wiki 에 Wiki 저장소를 clone 해 둔다
+const WIKI_DIR = "wiki";                               // ./wiki 에 위키 저장소 클론됨
 const octokit  = new Octokit({ auth: process.env.STAR_TOKEN });
 
-/* ─────────────── utils ─────────────── */
+/* ────────────────────────────── 유틸 ────────────────────────────── */
 const ensureDir = (d) => { if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true }); };
 const toFile    = (t) => t.replace(/[\/\\]/g, "-").replace(/\s+/g, "-");
-const write     = (p, content) => { fs.writeFileSync(p, content, "utf8"); console.log("WROTE:", p); };
+const lineOf = (r) => {
+  const full  = `${r.owner.login} / ${r.name}`;
+  const desc  = (r.description || "").replace(/\r?\n/g, " ").trim();
+  const stars = r.stargazers_count ?? 0;
+  return `- [${full}](${r.html_url}) — ${desc}${stars ? `  ⭐ ${stars}` : ""}`;
+};
+function write(p, content) {
+  // content += `\n<!-- updated: ${new Date().toISOString()} -->\n`; // 디버깅용
+  fs.writeFileSync(p, content, "utf8");
+  console.log("WROTE:", p, content.length, "bytes");
+}
 
 /* ─────────────── config loaders ─────────────── */
 function loadListsConfig() {
@@ -29,88 +37,27 @@ function loadListsConfig() {
   }
 }
 
-// notes.yml: title/desc/emoji/tags/link/pin/order/category/lists/hide_star
-function loadUserNotes() {
-  const p = path.join("config", "notes.yml");
-  if (!fs.existsSync(p)) return {};
-  try {
-    const doc = yaml.load(fs.readFileSync(p, "utf8"));
-    const raw = doc?.notes || {};
-    const out = {};
-    for (const [k, v] of Object.entries(raw)) {
-      if (!v) continue;
-      out[k.toLowerCase()] = {
-        title: String(v.title || "").trim(),
-        desc: String(v.desc || "").trim(),
-        emoji: String(v.emoji || "").trim(),
-        tags:  Array.isArray(v.tags) ? v.tags.map(String) : [],
-        link:  String(v.link || "").trim(),
-        pin:   !!v.pin,
-        order: Number.isFinite(v.order) ? Number(v.order) : 9999,
-        category: String(v.category || "").trim(),
-        lists: Array.isArray(v.lists) ? v.lists.map(String) : [],
-        hide_star: !!v.hide_star,
-      };
-    }
-    console.log(`[notes.yml] loaded: ${Object.keys(out).length}`);
-    return out;
-  } catch (e) {
-    console.warn("[notes.yml] parse error:", e?.message);
-    return {};
-  }
-}
-const USER_NOTES = loadUserNotes();
+/* repo가 규칙(rule)에 맞는지 */
+function matchByRules(repo, rule) {
+  const repoId = `${repo?.owner?.login}/${repo?.name}`.toLowerCase();
+  const hay    = `${repo?.name ?? ""} ${repo?.description ?? ""}`.toLowerCase();
+  const topics = Array.isArray(repo?.topics)
+    ? repo.topics.map(t => String(t).toLowerCase())
+    : [];
 
-/* ─────────────── wiki notes pages (wiki/notes/*.md) ─────────────── */
-const NOTES_DIR = path.join(WIKI_DIR, "notes");
-const AUTO_NOTE_PAGE = (process.env.AUTO_NOTE_PAGE ?? "true").toLowerCase() === "true";
-const NOTE_FIRSTLINE = (process.env.NOTE_FIRSTLINE ?? "true").toLowerCase() === "true"; // 기본 true 권장
-const TITLE_STYLE    = (process.env.TITLE_STYLE ?? "inline").toLowerCase();             // inline | newline
+  if (Array.isArray(rule.repos) &&
+      rule.repos.some(x => x.toLowerCase() === repoId)) return true;
 
-const noteSlug = (owner, repo) =>
-  `${owner}--${repo}`.toLowerCase().replace(/[^a-z0-9._-]+/g, "-") + ".md";
+  if (Array.isArray(rule.exclude_keywords) &&
+      rule.exclude_keywords.some(k => hay.includes(k.toLowerCase()))) return false;
 
-function noteFileFor(owner, repo) {
-  return path.join(NOTES_DIR, noteSlug(owner, repo));
-}
+  if (Array.isArray(rule.include_keywords) &&
+      rule.include_keywords.some(k => hay.includes(k.toLowerCase()))) return true;
 
-// 없으면 한 번만 생성. 이후 절대 덮어쓰지 않음.
-function ensureNotePage(repo) {
-  if (!AUTO_NOTE_PAGE) return null;
-  const p = noteFileFor(repo.owner.login, repo.name);
-  if (!fs.existsSync(p)) {
-    fs.mkdirSync(NOTES_DIR, { recursive: true });
-    fs.writeFileSync(
-      p,
-`# ${repo.owner.login} / ${repo.name} — Notes
+  if (Array.isArray(rule.include_topics) &&
+      topics.some(t => rule.include_topics.some(k => t.includes(k.toLowerCase())))) return true;
 
-> 이 파일은 자동 생성되며, **수정 내용은 보존**됩니다. 스크립트가 덮어쓰지 않습니다.
-
-## Why I starred
--
-
-## Usage / Tips
--
-
-## Links
-- ${repo.html_url}
-`,
-      "utf8"
-    );
-  }
-  return p;
-}
-
-// 노트 파일의 첫 번째 “비어있지 않고 #으로 시작하지 않는” 줄
-function readNoteFirstLine(p) {
-  try {
-    const txt = fs.readFileSync(p, "utf8").replace(/\r/g, "");
-    const lines = txt.split("\n").map(l => l.trim()).filter(Boolean);
-    const first = lines.find(l => !l.startsWith("#"));
-    return first || "";
-  } catch {
-    return "";
-  }
+  return false;
 }
 
 /* ─────────────── fallback categories ─────────────── */
@@ -149,25 +96,43 @@ function pickFallbackCategory(repo) {
   return UNC;
 }
 
-/* ─────────────── fetching stars ─────────────── */
+
+
+// ✅ listReposStarredByAuthenticatedUser / listReposStarredByUser
+// 어떤 형태가 와도 "레포 객체 배열"로 통일
 function normalizeStarItems(items) {
   if (!Array.isArray(items)) return [];
   return items
-    .map(it => (it && it.repo) ? it.repo : it)
+    .map(it => (it && it.repo) ? it.repo : it) // e.repo 형태면 repo만 추출
     .filter(r => r && r.owner && r.owner.login && r.name);
 }
 
+/** 인증 스타 → 0건이면 공개 스타 폴백. topics는 "새 객체"에 채워서 반환 */
+
+// ✅ 인증 → 0건이면 공개 스타 폴백
+// ✅ "원본 r"을 절대 수정하지 않고, 새 객체에 topics를 넣어 반환
+// ✅ for-of로 순회(인덱스 접근 중간에 hole이 있어도 안전)
 async function fetchStarred(username) {
-  let authItems = await octokit
-    .paginate(octokit.activity.listReposStarredByAuthenticatedUser, { per_page: 100 })
-    .catch(() => []);
+  // 1) 인증 사용자 기준
+  let authItems = await octokit.paginate(
+    octokit.activity.listReposStarredByAuthenticatedUser,
+    { per_page: 100 }
+  ).catch(e => {
+    console.warn("[fetchStarred] auth paginate error:", e?.status || e?.message);
+    return [];
+  });
   let base = normalizeStarItems(authItems);
   console.log("[fetchStarred] authenticated:", base.length);
 
   if (base.length === 0 && username) {
-    const pubItems = await octokit
-      .paginate(octokit.activity.listReposStarredByUser, { username, per_page: 100 })
-      .catch(() => []);
+    console.log("[fetchStarred] fallback → public stars of", username);
+    const pubItems = await octokit.paginate(
+      octokit.activity.listReposStarredByUser,
+      { username, per_page: 100 }
+    ).catch(e => {
+      console.warn("[fetchStarred] public paginate error:", e?.status || e?.message);
+      return [];
+    });
     base = normalizeStarItems(pubItems);
     console.log("[fetchStarred] public:", base.length);
   }
@@ -181,8 +146,13 @@ async function fetchStarred(username) {
       try {
         const tr = await octokit.repos.getAllTopics({ owner: r.owner.login, repo: r.name });
         names = Array.isArray(tr?.data?.names) ? tr.data.names : [];
-      } catch { names = []; }
+      } catch (e) {
+        // 404/권한/레이트리밋 등은 무시
+        names = [];
+      }
     }
+
+    // 🔸 원본 r을 건드리지 않고 새 객체로 반환 (topics는 항상 배열)
     out.push({
       owner: { login: r.owner.login },
       name: r.name,
@@ -193,6 +163,8 @@ async function fetchStarred(username) {
     });
     i++;
   }
+
+  console.log("[fetchStarred] sample:", out.slice(0, 5).map(x => `${x.owner.login}/${x.name}`));
   return out;
 }
 
@@ -293,7 +265,7 @@ const main = async () => {
   const groups = {};
 
   if (listsCfg && listsCfg.length) {
-    // 규칙 기반 + notes.lists 추가, 미매칭은 폴백 카테고리로 자동 분배
+    // ✅ YAML 기반 “리스트” 분류
     for (const r of starred) {
       let hit = 0;
       for (const rule of listsCfg) {
@@ -309,25 +281,25 @@ const main = async () => {
           hit++;
         }
       }
-      const note = USER_NOTES[`${r.owner.login}/${r.name}`.toLowerCase()];
-      if (note?.lists?.length) {
-        for (const name of note.lists) (groups[name] ||= []).push(r);
-        hit = 1;
-      }
-      if (hit === 0) {
-        const note2 = USER_NOTES[`${r.owner.login}/${r.name}`.toLowerCase()];
-        const cat   = note2?.category ? note2.category : pickFallbackCategory(r);
-        (groups[cat] ||= []).push(r);
-      }
+      if (hit === 0) (groups[UNC] ||= []).push(r);
     }
 
-    // Home 순서: lists.yml 순서 + 실제 생성된 폴백 카테고리 + UNC(있을 때만)
-    const prefer = listsCfg.map(l => l.name);
-    const extra  = Object.keys(groups).filter(k => !prefer.includes(k) && k !== UNC);
-    var order    = [...prefer, ...extra, ...(groups[UNC]?.length ? [UNC] : [])];
+    Object.values(groups).forEach((list) =>
+      list.sort((a, b) => (b.stargazers_count || 0) - (a.stargazers_count || 0))
+    );
 
+    ensureDir(WIKI_DIR);
+    const order = [...listsCfg.map(l => l.name), UNC];
+    write(path.join(WIKI_DIR, "Home.md"), renderHomeFromGroups(groups, order));
+
+    for (const name of order) {
+      const list = groups[name] || [];
+      if (!list.length) continue;
+      const body = `# ${name}\n\n` + list.map(lineOf).join("\n") + "\n";
+      write(path.join(WIKI_DIR, `${toFile(name)}.md`), body);
+    }
   } else {
-    // 키워드 폴백 + notes.category 강제
+    // 🔁 lists.yml 없으면 키워드 분류 사용
     for (const r of starred) {
       const note = USER_NOTES[`${r.owner.login}/${r.name}`.toLowerCase()];
       const cat = note?.category ? note.category : pickFallbackCategory(r);
@@ -355,4 +327,4 @@ const main = async () => {
   console.log("Generated files:", files);
 };
 
-main().catch(e => { console.error("ERROR:", e); process.exit(1); });
+main().catch((e) => { console.error("ERROR:", e); process.exit(1); });

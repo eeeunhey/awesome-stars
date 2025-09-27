@@ -1,0 +1,60 @@
+lists:
+  - name: "확장 & 기타 (Extensions & Others)"
+    repos: []
+    include_keywords: ["extension","helper","toolkit","plugin","template","starter","boilerplate","cli","widget","fun","gitanimals","build-your-own-x","awesome-stars"]
+    include_topics: ["extension","plugin","template","cli","vscode"]
+    exclude_keywords: []
+
+  - name: "자동화 (Automation)"
+    repos: []
+    include_keywords: ["github-actions","action","actions","workflow","workflows","pipeline","pipelines","ci","cd","devops","runner","act","cron","scheduler","bot","automation","opencode","codemod","pre-commit","lefthook","release","deploy","build"]
+    include_topics: ["actions","automation","ci","cd","devops","pipeline","pre-commit"]
+    exclude_keywords: []
+
+  - name: "웹 & 프론트엔드 (Web & Frontend)"
+    repos: []
+    include_keywords: ["react","next","remix","astro","gatsby","vue","nuxt","svelte","solid","qwik","angular","lit","web components","pwa","vite","webpack","rollup","parcel","esbuild","rspack","redux","zustand","jotai","recoil","tanstack","query","router","form","tailwind","material","mui","shadcn","chakra","antd","mantine","radix","scss","sass","less","postcss","css-in-js","styled-components","emotion","storybook","jest","vitest","cypress","playwright","i18n","intl","webgl","three","d3","mapbox","leaflet"]
+    include_topics: ["react","nextjs","vue","nuxt","svelte","solid","astro","vite","webpack","rollup","tailwindcss","mui","shadcn","chakra-ui","radix-ui","storybook","cypress","playwright","jest","vitest","webgl","threejs","d3","mapbox","leaflet"]
+    exclude_keywords: []
+
+  - name: "인공지능 / 머신러닝 (AI / ML)"
+    repos: []
+    include_keywords: ["ai","ml","machine learning","deep learning","data science","llm","rag","retrieval","rerank","embedding","vector","peft","lora","qlora","finetune","fine-tune","rlhf","dpo","sft","prompt","pytorch","tensorflow","jax","onnx","openvino","triton","vllm","tensorrt","gguf","llama","mistral","gemma","qwen","tts","asr","stt","whisper","multimodal","clip","sam","marimo","notebook","jupyter"]
+    include_topics: ["llm","rag","embedding","vector-db","fine-tuning","lora","rlhf","pytorch","tensorflow","jax","onnx","vllm","tensorrt","whisper","tts","asr","audio","vision","multimodal"]
+    exclude_keywords: []
+
+  - name: "리소스 / 자료 모음 (Resources)"
+    repos: []
+    include_keywords: ["awesome","awesome-list","collection","resources","handbook","guide","cheatsheet","cheat-sheet","examples","templates","snippets","patterns","recipes","curated","profile-readme","devteam","dev-conf-replay","gallery","book"]
+    include_topics: ["awesome","awesome-list","curated-list","resources"]
+    exclude_keywords: []
+
+  - name: "학습 & 스터디 (Learning & Study)"
+    repos: []
+    include_keywords: ["course","lecture","slides","syllabus","book","notes","notebook","workshop","tutorial","lab","examples","practice","exercises","problems","solutions","university","mooc","udemy","coursera","edx","kaggle","stat453","retreat","qandai"]
+    include_topics: ["course","lecture","education","tutorial","notes","notebook","slides"]
+    exclude_keywords: []
+
+  - name: "디자인 & AI 연동 (Design & AI Integration)"
+    repos: []
+    include_keywords: ["figma","figjam","design","design-system","design tokens","token","ui","ux","icon","font","typography","color","palette","prompt","copilot","mcp","cursor","agent","ui agent","shadcn","radix","base-ui","magicui"]
+    include_topics: ["figma","design","design-system","design-tokens","ui","ux","prompt","copilot","mcp"]
+    exclude_keywords: []
+
+  - name: "백엔드 & 런타임 (Backend & Runtime)"
+    repos: []
+    include_keywords: ["backend","server","serverless","edge","api","rest","graphql","grpc","node","nodejs","express","fastify","nest","koa","hono","deno","bun","go","rust","java","spring","kotlin","scala",".net","dotnet","csharp","python","django","flask","fastapi","lambda","cloudflare","workers","vercel edge","database","db","orm","prisma","drizzle","typeorm","sequelize","redis","postgres","mysql","sqlite","mongo","kafka","rabbitmq","nats","runtime","wasm","webassembly"]
+    include_topics: ["backend","serverless","edge","api","rest","graphql","grpc","nodejs","deno","bun","go","rust","python","fastapi","django","database","orm","prisma","drizzle","postgres","mysql","sqlite","mongo","redis","kafka","runtime","wasm","webassembly"]
+    exclude_keywords: []
+
+  - name: "시각화 & 도구 (Visualization & Tool)"
+    repos: []
+    include_keywords: ["visualization","viz","chart","charts","graph","graphs","d3","chartjs","plotly","echarts","highcharts","nivo","apexcharts","matplotlib","seaborn","bokeh","holoviews","altair","three","threejs","webgl","canvas","deck.gl","kepler.gl","mapbox","leaflet","maplibre","gis","geospatial"]
+    include_topics: ["visualization","chart","graph","d3","chartjs","plotly","echarts","matplotlib","seaborn","bokeh","webgl","threejs","deck.gl","kepler.gl","mapbox","leaflet","maplibre","gis","geospatial"]
+    exclude_keywords: []
+
+  - name: "데이터 & 처리 (Data & Processing)"
+    repos: []
+    include_keywords: ["data","dataset","etl","elt","pipeline","pipelines","batch","streaming","streaming data","airflow","dagster","prefect","spark","flink","beam","kafka","dataframe","pandas","polars","dask","pyspark","sql","dbt","duckdb","clickhouse","bigquery","snowflake","delta","lake","parquet","arrow","mlops","feature store","monitoring","lineage","catalog","metastore","notebook","jupyter","marimo"]
+    include_topics: ["etl","pipeline","spark","flink","kafka","airflow","dagster","prefect","pandas","polars","dask","dataframe","sql","dbt","duckdb","clickhouse","bigquery","snowflake","parquet","arrow","mlops","lineage","catalog","feature-store"]
+    exclude_keywords: []
