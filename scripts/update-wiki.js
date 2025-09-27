@@ -223,8 +223,8 @@ function lineOf(r) {
 
 /* ---------------- render ---------------- */
 function renderHomeFromGroups(groups, order) {
-  const now = new Date().toISOString();
-  let out = `# ⭐ Starred Repos (자동 생성)\n\n> 마지막 업데이트: ${now}\n\n`;
+  const now = nowKST();  // ← 여기!
+  let out = `# ⭐ Starred Repos (자동 생성)\n\n> 마지막 업데이트(한국 시간): ${now}\n\n`;
   for (const name of order) {
     const list = groups[name] || [];
     if (!list.length) continue;
@@ -232,6 +232,26 @@ function renderHomeFromGroups(groups, order) {
   }
   return out + "\n";
 }
+
+
+// KST yyyy-mm-dd HH:MM 형식으로 반환
+function nowKST() {
+  const d = new Date();
+  const dtf = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Seoul',
+    hour12: false,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+  const parts = dtf.formatToParts(d).reduce((acc, p) => (acc[p.type] = p.value, acc), {});
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute} KST`;
+}
+
+
+
 
 /* ---------------- main ---------------- */
 const main = async () => {
