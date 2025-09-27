@@ -11,7 +11,7 @@ jobs:
     permissions:
       contents: write
     env:
-      WIKI_REMOTE: https://x-access-token:${{ secrets.STAR_TOKEN }}@github.com/eeeunhey/awesome-stars.wiki.git
+      WIKI_REMOTE: https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/eeeunhey/awesome-stars.wiki.git
 
     steps:
       - name: Checkout repo

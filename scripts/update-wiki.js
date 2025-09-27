@@ -7,7 +7,7 @@ import { Octokit } from "@octokit/rest";
 const WIKI_DIR = "wiki";                               // ./wiki 에 위키 저장소 클론됨
 const octokit  = new Octokit({ auth: process.env.STAR_TOKEN });
 
-// ===== 유틸 =====
+/* ────────────────────────────── 유틸 ────────────────────────────── */
 const ensureDir = (d) => { if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true }); };
 const toFile    = (t) => t.replace(/[\/\\]/g, "-").replace(/\s+/g, "-");
 const lineOf = (r) => {
@@ -17,13 +17,12 @@ const lineOf = (r) => {
   return `- [${full}](${r.html_url}) — ${desc}${stars ? `  ⭐ ${stars}` : ""}`;
 };
 function write(p, content) {
-  // 디버깅 중 항상 변경 감지 원하면 아래 주석 해제
-  // content += `\n<!-- updated: ${new Date().toISOString()} -->\n`;
+  // content += `\n<!-- updated: ${new Date().toISOString()} -->\n`; // 디버깅용
   fs.writeFileSync(p, content, "utf8");
   console.log("WROTE:", p, content.length, "bytes");
 }
 
-// ===== 리스트 규칙 로딩 =====
+/* ───────────── 리스트 규칙 로딩 ───────────── */
 function loadListsConfig() {
   const p = path.join("config", "lists.yml");
   if (!fs.existsSync(p)) return null;
@@ -38,7 +37,7 @@ function loadListsConfig() {
   }
 }
 
-// repo가 규칙(rule)에 맞는지
+/* repo가 규칙(rule)에 맞는지 */
 function matchByRules(repo, rule) {
   const repoId = `${repo?.owner?.login}/${repo?.name}`.toLowerCase();
   const hay    = `${repo?.name ?? ""} ${repo?.description ?? ""}`.toLowerCase();
@@ -46,26 +45,22 @@ function matchByRules(repo, rule) {
     ? repo.topics.map(t => String(t).toLowerCase())
     : [];
 
-  // 지정 repos 우선
   if (Array.isArray(rule.repos) &&
       rule.repos.some(x => x.toLowerCase() === repoId)) return true;
 
-  // 제외 키워드
   if (Array.isArray(rule.exclude_keywords) &&
       rule.exclude_keywords.some(k => hay.includes(k.toLowerCase()))) return false;
 
-  // 포함 키워드
   if (Array.isArray(rule.include_keywords) &&
       rule.include_keywords.some(k => hay.includes(k.toLowerCase()))) return true;
 
-  // 포함 토픽
   if (Array.isArray(rule.include_topics) &&
       topics.some(t => rule.include_topics.some(k => t.includes(k.toLowerCase())))) return true;
 
   return false;
 }
 
-// ===== (백업용) 키워드 카테고리 =====
+/* ───────────── (백업) 키워드 카테고리 ───────────── */
 const FALLBACK_CATS = [
   "확장 & 기타 (Extensions & Others)",
   "자동화 (Automation)",
@@ -103,52 +98,61 @@ function pickFallbackCategory(repo) {
   return UNC;
 }
 
-// ===== 스타 가져오기 (인증 → 0건이면 공개 스타 폴백) =====
+/* ─────────────⭐ 핵심: 응답 정규화 + 안전한 fetch ───────────── */
+/** 리스트/유저 API 응답을 레포 객체 배열로 정규화 */
+function normalizeStarItems(items) {
+  return (items ?? [])
+    .map(it => (it && it.repo) ? it.repo : it)       // star 이벤트(e.repo)면 repo만 꺼내고, 이미 레포면 그대로
+    .filter(r => r && r.owner && r.owner.login && r.name);
+}
+
+/** 인증 스타 → 0건이면 공개 스타 폴백. topics는 "새 객체"에 채워서 반환 */
 async function fetchStarred(username) {
-  // 이 엔드포인트들은 "레포 배열"을 바로 반환함
-  const authRepos = await octokit.paginate(
+  // 1) 인증 사용자 기준
+  const authItems = await octokit.paginate(
     octokit.activity.listReposStarredByAuthenticatedUser,
     { per_page: 100 }
   );
-  let all = (authRepos ?? []).filter(
-    (r) => r && r.owner && r.owner.login && r.name
-  );
-  console.log("[fetchStarred] authenticated repos:", all.length);
+  let base = normalizeStarItems(authItems);
+  console.log("[fetchStarred] authenticated repos:", base.length);
 
-  if (all.length === 0 && username) {
+  // 2) 0건이면 공개 스타 폴백
+  if (base.length === 0 && username) {
     console.log("[fetchStarred] fallback → public stars of", username);
-    const publicRepos = await octokit.paginate(
+    const pubItems = await octokit.paginate(
       octokit.activity.listReposStarredByUser,
       { username, per_page: 100 }
     );
-    all = (publicRepos ?? []).filter(
-      (r) => r && r.owner && r.owner.login && r.name
-    );
-    console.log("[fetchStarred] public repos:", all.length);
+    base = normalizeStarItems(pubItems);
+    console.log("[fetchStarred] public repos:", base.length);
   }
 
-  // 토픽 보강(상위 300개만)
-  for (let i = 0; i < Math.min(all.length, 300); i++) {
-    const r = all[i];
+  // 3) topics 보강(상위 300개만). 실패해도 계속 진행.
+  const out = [];
+  for (let i = 0; i < base.length; i++) {
+    const r = base[i];
     if (!r?.owner?.login || !r?.name) continue;
-    try {
-      const tr = await octokit.repos.getAllTopics({
-        owner: r.owner.login,
-        repo: r.name,
-      });
-      const names = Array.isArray(tr?.data?.names) ? tr.data.names : [];
-      r.topics = Array.isArray(r.topics) ? r.topics : [];
-      r.topics.push(...names);
-    } catch {
-      r.topics = Array.isArray(r.topics) ? r.topics : [];
+
+    let names = [];
+    if (i < 300) {
+      try {
+        const tr = await octokit.repos.getAllTopics({
+          owner: r.owner.login,
+          repo: r.name,
+        });
+        names = Array.isArray(tr?.data?.names) ? tr.data.names : [];
+      } catch { /* ignore 404/권한/레이트리밋 */ }
     }
+
+    // 원본을 건드리지 않고, 항상 topics 배열이 있는 "새 객체"로 반환
+    out.push({ ...r, topics: names });
   }
 
-  console.log("[fetchStarred] sample:", all.slice(0, 5).map(r => `${r.owner.login}/${r.name}`));
-  return all;
+  console.log("[fetchStarred] sample:", out.slice(0, 5).map(x => `${x.owner.login}/${x.name}`));
+  return out;
 }
 
-// ===== 렌더 =====
+/* ───────────── 렌더 ───────────── */
 function renderHomeFromGroups(groups, order) {
   const now = new Date().toISOString();
   let out = `# ⭐ Starred Repos (자동 생성)\n\n> 마지막 업데이트: ${now}\n\n`;
@@ -160,7 +164,7 @@ function renderHomeFromGroups(groups, order) {
   return out + "\n";
 }
 
-// ===== 메인 =====
+/* ───────────── 메인 ───────────── */
 const main = async () => {
   console.log("== Stars → Wiki (ESM) ==");
   if (!process.env.STAR_TOKEN) {
@@ -177,7 +181,7 @@ const main = async () => {
   const groups = {};
 
   if (listsCfg && listsCfg.length) {
-    // ✅ YAML 기반 “리스트” 분류 (하나의 레포가 여러 리스트에 들어갈 수 있음)
+    // ✅ YAML 기반 “리스트” 분류
     for (const r of starred) {
       let hit = 0;
       for (const rule of listsCfg) {
@@ -189,7 +193,6 @@ const main = async () => {
       if (hit === 0) (groups[UNC] ||= []).push(r);
     }
 
-    // 정렬 및 출력
     Object.values(groups).forEach((list) =>
       list.sort((a, b) => (b.stargazers_count || 0) - (a.stargazers_count || 0))
     );
@@ -205,7 +208,7 @@ const main = async () => {
       write(path.join(WIKI_DIR, `${toFile(name)}.md`), body);
     }
   } else {
-    // 🔁 lists.yml 이 없으면 키워드 카테고리 분류로 대체
+    // 🔁 lists.yml 없으면 키워드 분류 사용
     for (const r of starred) {
       const cat = pickFallbackCategory(r);
       (groups[cat] ||= []).push(r);
