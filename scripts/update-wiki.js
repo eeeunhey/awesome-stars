@@ -1,24 +1,29 @@
-// scripts/update-wiki.js — BASIC + notes + newline-title (ESM)
+// scripts/update-wiki.js — BASIC + notes + 3-line (ESM)
 import fs from "fs";
 import path from "path";
 import yaml from "js-yaml";
 import { Octokit } from "@octokit/rest";
 
-console.log("== Stars → Wiki (BASIC+NOTES) ==");
+console.log("== Stars → Wiki (BASIC+NOTES+3LINE) ==");
 
-const WIKI_DIR   = "wiki";                                  // 위키 저장소 클론 위치
-const NOTES_DIR  = path.join(WIKI_DIR, "notes");            // 수동/자동 노트 저장 경로
-const TITLE_STYLE = (process.env.TITLE_STYLE || "inline")   // inline | newline
-  .toLowerCase();
-const NOTE_LABEL  = process.env.NOTE_LABEL || "노트";        // 전역 기본 링크 라벨
-const NOTE_EMOJI  = process.env.NOTE_EMOJI || "";           // 전역 기본 이모지(예: "📝")
+const WIKI_DIR   = "wiki";                         // 위키 저장소 클론 위치
+const NOTES_DIR  = path.join(WIKI_DIR, "notes");   // 자동/수동 노트 저장 폴더
 
-const octokit  = new Octokit({ auth: process.env.STAR_TOKEN });
+// 출력/라벨 환경변수
+const TITLE_STYLE      = (process.env.TITLE_STYLE || "newline").toLowerCase(); // inline | newline
+const NOTE_LABEL       = process.env.NOTE_LABEL || "노트";
+const NOTE_EMOJI       = process.env.NOTE_EMOJI || "";
+const MEMO_PLACEHOLDER = process.env.MEMO_PLACEHOLDER || "작성 예정";
+
+const octokit = new Octokit({ auth: process.env.STAR_TOKEN });
 
 /* ---------------- utils ---------------- */
 const ensureDir = (d) => { if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true }); };
 const toFile    = (t) => t.replace(/[\/\\]/g, "-").replace(/\s+/g, "-");
 const write     = (p, content) => { fs.writeFileSync(p, content, "utf8"); console.log("WROTE:", p, content.length, "bytes"); };
+
+const slugify = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/-+/g, "-");
+const repoId  = (r) => `${r.owner.login}/${r.name}`.toLowerCase();
 
 /* ---------------- lists.yml loader ---------------- */
 function loadListsConfig() {
@@ -36,6 +41,14 @@ function loadListsConfig() {
 }
 
 /* ---------------- notes.yml loader ---------------- */
+/** notes.yml
+notes:
+  'n8n-io/n8n':
+    title: "n8n — 내가 쓰는 자동화 허브"
+    memo:  "반복 작업을 시각적 플로우 + 코드로 빠르게 자동화."
+    desc:  ""                # 선택 (추가 설명)
+    show_original: false     # desc가 있을 때 영문 원문과 병기 여부
+*/
 function loadUserNotes() {
   const p = path.join("config", "notes.yml");
   if (!fs.existsSync(p)) return {};
@@ -46,10 +59,9 @@ function loadUserNotes() {
     for (const [k, v] of Object.entries(raw)) {
       if (!v) continue;
       out[k.toLowerCase()] = {
-        title:        String(v.title || "").trim(),
-        desc:         String(v.desc || "").trim(),
-        link:         String(v.link || "").trim(),
-        link_label:   String(v.link_label || "").trim(), // per-repo 라벨(이모지 포함 가능)
+        title:         String(v.title || "").trim(),
+        memo:          String(v.memo  || "").trim(),
+        desc:          String(v.desc  || "").trim(),
         show_original: !!v.show_original,
       };
     }
@@ -62,7 +74,7 @@ function loadUserNotes() {
 }
 const USER_NOTES = loadUserNotes();
 
-/* ---------------- fallback categories ---------------- */
+/* ---------------- fallback categories (그대로) ---------------- */
 const FALLBACK_CATS = [
   "확장 & 기타 (Extensions & Others)",
   "자동화 (Automation)",
@@ -102,7 +114,7 @@ function pickFallbackCategory(repo) {
 function normalizeStarItems(items) {
   if (!Array.isArray(items)) return [];
   return items
-    .map(it => (it && it.repo) ? it.repo : it) // timeline 이벤트 형태 대응
+    .map(it => (it && it.repo) ? it.repo : it)
     .filter(r => r && r.owner && r.owner.login && r.name);
 }
 
@@ -146,22 +158,13 @@ async function fetchStarred(username) {
   return out;
 }
 
-/* ---------------- render ---------------- */
-function renderHomeFromGroups(groups, order) {
-  const now = new Date().toISOString();
-  let out = `# ⭐ Starred Repos (자동 생성)\n\n> 마지막 업데이트: ${now}\n\n`;
-  for (const name of order) {
-    const list = groups[name] || [];
-    if (!list.length) continue;
-    out += `- [[${name}|${toFile(name)}]] (${list.length})\n`;
-  }
-  return out + "\n";
-}
-
 /* ---------------- notes helpers ---------------- */
+function notePathsFor(repo) {
+  const rel = `./notes/${slugify(repo.owner.login)}--${slugify(repo.name)}.md`;
+  return { rel, abs: path.join(WIKI_DIR, rel) };
+}
 function ensureNoteFile(absPath, title = "Notes", repoUrl = "") {
-  // 존재하면 그대로 보존(덮어쓰기 금지)
-  if (fs.existsSync(absPath)) return;
+  if (fs.existsSync(absPath)) return; // 있으면 유지
   ensureDir(path.dirname(absPath));
   const body = `# ${title}
 
@@ -177,10 +180,9 @@ function ensureNoteFile(absPath, title = "Notes", repoUrl = "") {
   fs.writeFileSync(absPath, body, "utf8");
 }
 
-/* ---------------- description builder ---------------- */
+/* ---------------- description ---------------- */
 function getDescWithNote(repo) {
-  const id   = `${repo.owner.login}/${repo.name}`.toLowerCase();
-  const note = USER_NOTES[id];
+  const note = USER_NOTES[repoId(repo)];
   const original = (repo?.description || "").replace(/\r?\n/g, " ").trim();
 
   if (note?.desc && note?.show_original && original) {
@@ -193,36 +195,42 @@ function getDescWithNote(repo) {
   return topics ? `Key topics: ${topics}` : `No description provided.`;
 }
 
-/* ---------------- one-line / two-line builder ---------------- */
+/* ---------------- line builder (항상 3줄) ---------------- */
 function lineOf(r) {
-  const id   = `${r.owner.login}/${r.name}`.toLowerCase();
-  const note = USER_NOTES[id];
+  const note = USER_NOTES[repoId(r)] || {};
 
+  // 1) 제목 줄
+  const titleText = note.title || r.name;
+  const titleLine = `- **${titleText}**`;
+
+  // 2) 링크 + 기본 설명
   const label = `${r.owner.login} / ${r.name}`;
   const link  = `[${label}](${r.html_url})`;
   const desc  = getDescWithNote(r);
-  const star  = r.stargazers_count ? `  ⭐ ${r.stargazers_count}` : "";
+  const secondLine = `  ${link} — ${desc}`;
 
-  // 노트 링크 준비(+ 필요 시 템플릿 파일 1회 자동 생성)
-  let notePart = "";
-  if (note?.link) {
-    const abs = path.isAbsolute(note.link) ? note.link : path.join(WIKI_DIR, note.link);
-    const titleForNote = note?.title || `${r.name} — Notes`;
-    ensureNoteFile(abs, titleForNote, r.html_url);
+  // 3) 메모 + 노트 링크 + 스타
+  const { rel: relNote, abs: absNote } = notePathsFor(r);
+  ensureNoteFile(absNote, note.title ? note.title : `${r.name} — Notes`, r.html_url);
 
-    const labelText = (note.link_label && note.link_label.trim())
-      ? note.link_label.trim()
-      : `${NOTE_EMOJI ? NOTE_EMOJI + " " : ""}${NOTE_LABEL}`;
-    notePart = ` · [${labelText}](${note.link})`;
+  const memo   = (note.memo && note.memo.trim()) ? note.memo.trim() : MEMO_PLACEHOLDER;
+  const labelText = `${NOTE_EMOJI ? NOTE_EMOJI + " " : ""}${NOTE_LABEL}`;
+  const star   = r.stargazers_count ? `  ⭐ ${r.stargazers_count}` : "";
+  const thirdLine = `  · 메모: ${memo} · [${labelText}](${relNote})${star}`;
+
+  return `${titleLine}\n${secondLine}\n${thirdLine}`;
+}
+
+/* ---------------- render ---------------- */
+function renderHomeFromGroups(groups, order) {
+  const now = new Date().toISOString();
+  let out = `# ⭐ Starred Repos (자동 생성)\n\n> 마지막 업데이트: ${now}\n\n`;
+  for (const name of order) {
+    const list = groups[name] || [];
+    if (!list.length) continue;
+    out += `- [[${name}|${toFile(name)}]] (${list.length})\n`;
   }
-
-  if (note?.title && TITLE_STYLE === "newline") {
-    // 2줄 스타일
-    return `- **${note.title}**\n  ${link} — ${desc}${notePart}${star}`;
-  } else {
-    // 1줄 스타일
-    return `- ${link} — ${desc}${notePart}${star}`;
-  }
+  return out + "\n";
 }
 
 /* ---------------- main ---------------- */
@@ -237,15 +245,14 @@ const main = async () => {
   const groups = {};
 
   if (listsCfg && listsCfg.length) {
-    // 규칙 기반 분류
     for (const r of starred) {
       let hit = 0;
-      const repoId = `${r.owner.login}/${r.name}`.toLowerCase();
+      const id     = repoId(r);
       const hay    = `${r.name} ${r.description || ""}`.toLowerCase();
       const topics = Array.isArray(r.topics) ? r.topics.map(t => t.toLowerCase()) : [];
 
       for (const rule of listsCfg) {
-        const inRepos = Array.isArray(rule.repos) && rule.repos.some(x => x.toLowerCase() === repoId);
+        const inRepos = Array.isArray(rule.repos) && rule.repos.some(x => x.toLowerCase() === id);
         const exKey   = Array.isArray(rule.exclude_keywords) && rule.exclude_keywords.some(k => hay.includes(k.toLowerCase()));
         const inKey   = Array.isArray(rule.include_keywords) && rule.include_keywords.some(k => hay.includes(k.toLowerCase()));
         const inTopic = Array.isArray(rule.include_topics) && topics.some(t => rule.include_topics.some(k => t.includes(k.toLowerCase())));
@@ -257,14 +264,13 @@ const main = async () => {
       if (hit === 0) (groups[UNC] ||= []).push(r);
     }
   } else {
-    // 키워드 폴백
     for (const r of starred) {
       const cat = pickFallbackCategory(r);
       (groups[cat] ||= []).push(r);
     }
   }
 
-  // 정렬: 스타 수 내림차순
+  // 스타 내림차순
   Object.values(groups).forEach(list =>
     list.sort((a, b) => (b.stargazers_count || 0) - (a.stargazers_count || 0))
   );
@@ -280,7 +286,8 @@ const main = async () => {
   for (const name of order) {
     const list = groups[name] || [];
     if (!list.length) continue;
-    const body = `# ${name}\n\n` + list.map(lineOf).join("\n") + "\n";
+    // 보기 좋게 항목 사이 빈 줄 하나
+    const body = `# ${name}\n\n` + list.map(lineOf).join("\n\n") + "\n";
     write(path.join(WIKI_DIR, `${toFile(name)}.md`), body);
   }
 

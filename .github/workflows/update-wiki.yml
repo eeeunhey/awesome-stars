@@ -54,6 +54,9 @@ jobs:
           STAR_TOKEN: ${{ secrets.STAR_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           TITLE_STYLE: newline 
+          NOTE_LABEL: " 노트"           # 링크 라벨
+          NOTE_EMOJI: "📝"               # "" 등 원하면 지정
+          MEMO_PLACEHOLDER: " " # 메모가 없을 때 표시할 기본 문구
         run: node scripts/update-wiki.js
 
       - name: Preview generated files
