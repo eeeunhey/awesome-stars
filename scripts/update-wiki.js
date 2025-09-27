@@ -1,23 +1,27 @@
-// scripts/update-wiki.js (ESM)
+// scripts/update-wiki.js (ESM) — vSAFE
 import fs from "fs";
 import path from "path";
 import yaml from "js-yaml";
 import { Octokit } from "@octokit/rest";
 
-const WIKI_DIR = "wiki";                               // ./wiki 에 위키 저장소 클론됨
-const octokit  = new Octokit({ auth: process.env.STAR_TOKEN });
+console.log("[BOOT] update-wiki.js vSAFE");
+
+const WIKI_DIR = "wiki"; // ./wiki에 위키 저장소를 클론해 둔다
+const octokit = new Octokit({ auth: process.env.STAR_TOKEN });
 
 /* ────────────────────────────── 유틸 ────────────────────────────── */
-const ensureDir = (d) => { if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true }); };
-const toFile    = (t) => t.replace(/[\/\\]/g, "-").replace(/\s+/g, "-");
+const ensureDir = (d) => {
+  if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
+};
+const toFile = (t) => t.replace(/[\/\\]/g, "-").replace(/\s+/g, "-");
 const lineOf = (r) => {
-  const full  = `${r.owner.login} / ${r.name}`;
-  const desc  = (r.description || "").replace(/\r?\n/g, " ").trim();
+  const full = `${r.owner.login} / ${r.name}`;
+  const desc = (r.description || "").replace(/\r?\n/g, " ").trim();
   const stars = r.stargazers_count ?? 0;
   return `- [${full}](${r.html_url}) — ${desc}${stars ? `  ⭐ ${stars}` : ""}`;
 };
 function write(p, content) {
-  // content += `\n<!-- updated: ${new Date().toISOString()} -->\n`; // 디버깅용
+  // content += `\n<!-- updated: ${new Date().toISOString()} -->\n`; // 필요시 변경감지용
   fs.writeFileSync(p, content, "utf8");
   console.log("WROTE:", p, content.length, "bytes");
 }
@@ -40,23 +44,32 @@ function loadListsConfig() {
 /* repo가 규칙(rule)에 맞는지 */
 function matchByRules(repo, rule) {
   const repoId = `${repo?.owner?.login}/${repo?.name}`.toLowerCase();
-  const hay    = `${repo?.name ?? ""} ${repo?.description ?? ""}`.toLowerCase();
+  const hay = `${repo?.name ?? ""} ${repo?.description ?? ""}`.toLowerCase();
   const topics = Array.isArray(repo?.topics)
-    ? repo.topics.map(t => String(t).toLowerCase())
+    ? repo.topics.map((t) => String(t).toLowerCase())
     : [];
 
-  if (Array.isArray(rule.repos) &&
-      rule.repos.some(x => x.toLowerCase() === repoId)) return true;
-
-  if (Array.isArray(rule.exclude_keywords) &&
-      rule.exclude_keywords.some(k => hay.includes(k.toLowerCase()))) return false;
-
-  if (Array.isArray(rule.include_keywords) &&
-      rule.include_keywords.some(k => hay.includes(k.toLowerCase()))) return true;
-
-  if (Array.isArray(rule.include_topics) &&
-      topics.some(t => rule.include_topics.some(k => t.includes(k.toLowerCase())))) return true;
-
+  if (Array.isArray(rule.repos) && rule.repos.some((x) => x.toLowerCase() === repoId)) {
+    return true;
+  }
+  if (
+    Array.isArray(rule.exclude_keywords) &&
+    rule.exclude_keywords.some((k) => hay.includes(k.toLowerCase()))
+  ) {
+    return false;
+  }
+  if (
+    Array.isArray(rule.include_keywords) &&
+    rule.include_keywords.some((k) => hay.includes(k.toLowerCase()))
+  ) {
+    return true;
+  }
+  if (
+    Array.isArray(rule.include_topics) &&
+    topics.some((t) => rule.include_topics.some((k) => t.includes(k.toLowerCase())))
+  ) {
+    return true;
+  }
   return false;
 }
 
@@ -74,18 +87,94 @@ const FALLBACK_CATS = [
   "데이터 & 처리 (Data & Processing)",
 ];
 const KEYWORDS = {
-  "웹 & 프론트엔드 (Web & Frontend)": ["react","next","mui","material","shadcn","tailwind","vercel","ui","form","rrweb","reveal","ts-brand","lenses","velite","orval","image-url","darkmode","legid","liquid-glass","base-ui","magicui","ai-elements","resumable"],
-  "인공지능 / 머신러닝 (AI / ML)": ["pytorch","llm","rag","gemma","litgpt","finetune","ner","generate-sequences","kbla","execu","simpletuner","marimo","verifiers","lotus","orbital","ml","agent","ai"],
-  "데이터 & 처리 (Data & Processing)": ["sql","pandas","dataset","sklearn","notebook","lotus","orbital","matplotlib"],
-  "자동화 (Automation)": ["github-actions","actions","runner","act","n8n","hook","lefhook","mcp","server","opencode","codemod","resumable"],
-  "시각화 & 도구 (Visualization & Tool)": ["matplotlib","watermark","plot","fastplotlib","excalidraw"],
-  "백엔드 & 런타임 (Backend & Runtime)": ["nodejs","node","runtime"],
-  "디자인 & AI 연동 (Design & AI Integration)": ["figma","design","mcp","context"],
-  "학습 & 스터디 (Learning & Study)": ["book","course","lecture","stat453","retreat","study","examples","tutorial","qandai"],
-  "리소스 / 자료 모음 (Resources)": ["awesome","list","profile-readme","devteam","dev-conf-replay"],
-  "확장 & 기타 (Extensions & Others)": ["mlxtend","extension","helper","toolkit","snk","gitanimals","build-your-own-x"],
+  "웹 & 프론트엔드 (Web & Frontend)": [
+    "react",
+    "next",
+    "mui",
+    "material",
+    "shadcn",
+    "tailwind",
+    "vercel",
+    "ui",
+    "form",
+    "rrweb",
+    "reveal",
+    "ts-brand",
+    "lenses",
+    "velite",
+    "orval",
+    "image-url",
+    "darkmode",
+    "legid",
+    "liquid-glass",
+    "base-ui",
+    "magicui",
+    "ai-elements",
+    "resumable",
+  ],
+  "인공지능 / 머신러닝 (AI / ML)": [
+    "pytorch",
+    "llm",
+    "rag",
+    "gemma",
+    "litgpt",
+    "finetune",
+    "ner",
+    "generate-sequences",
+    "kbla",
+    "execu",
+    "simpletuner",
+    "marimo",
+    "verifiers",
+    "lotus",
+    "orbital",
+    "ml",
+    "agent",
+    "ai",
+  ],
+  "데이터 & 처리 (Data & Processing)": [
+    "sql",
+    "pandas",
+    "dataset",
+    "sklearn",
+    "notebook",
+    "lotus",
+    "orbital",
+    "matplotlib",
+  ],
+  "자동화 (Automation)": [
+    "github-actions",
+    "actions",
+    "runner",
+    "act",
+    "n8n",
+    "hook",
+    "lefhook",
+    "mcp",
+    "server",
+    "opencode",
+    "codemod",
+    "resumable",
+  ],
+  "시각화 & 도구 (Visualization & Tool)": ["matplotlib", "watermark", "plot", "fastplotlib", "excalidraw"],
+  "백엔드 & 런타임 (Backend & Runtime)": ["nodejs", "node", "runtime"],
+  "디자인 & AI 연동 (Design & AI Integration)": ["figma", "design", "mcp", "context"],
+  "학습 & 스터디 (Learning & Study)": [
+    "book",
+    "course",
+    "lecture",
+    "stat453",
+    "retreat",
+    "study",
+    "examples",
+    "tutorial",
+    "qandai",
+  ],
+  "리소스 / 자료 모음 (Resources)": ["awesome", "list", "profile-readme", "devteam", "dev-conf-replay"],
+  "확장 & 기타 (Extensions & Others)": ["mlxtend", "extension", "helper", "toolkit", "snk", "gitanimals", "build-your-own-x"],
 };
 const UNC = "기타 / 미분류";
+
 function pickFallbackCategory(repo) {
   const hay = `${repo?.name ?? ""} ${repo?.description ?? ""}`.toLowerCase();
   const topics = Array.isArray(repo?.topics)
@@ -98,44 +187,36 @@ function pickFallbackCategory(repo) {
   return UNC;
 }
 
-
-
-// ✅ listReposStarredByAuthenticatedUser / listReposStarredByUser
-// 어떤 형태가 와도 "레포 객체 배열"로 통일
+/* ─────────────⭐ 핵심: 응답 정규화 + 안전한 fetch ───────────── */
+/** 리스트/유저 API 응답을 레포 객체 배열로 정규화 */
 function normalizeStarItems(items) {
   if (!Array.isArray(items)) return [];
   return items
-    .map(it => (it && it.repo) ? it.repo : it) // e.repo 형태면 repo만 추출
-    .filter(r => r && r.owner && r.owner.login && r.name);
+    .map((it) => (it && it.repo ? it.repo : it)) // e.repo 형태면 repo만 추출
+    .filter((r) => r && r.owner && r.owner.login && r.name);
 }
 
 /** 인증 스타 → 0건이면 공개 스타 폴백. topics는 "새 객체"에 채워서 반환 */
-
-// ✅ 인증 → 0건이면 공개 스타 폴백
-// ✅ "원본 r"을 절대 수정하지 않고, 새 객체에 topics를 넣어 반환
-// ✅ for-of로 순회(인덱스 접근 중간에 hole이 있어도 안전)
 async function fetchStarred(username) {
-  // 1) 인증 사용자 기준
-  let authItems = await octokit.paginate(
-    octokit.activity.listReposStarredByAuthenticatedUser,
-    { per_page: 100 }
-  ).catch(e => {
-    console.warn("[fetchStarred] auth paginate error:", e?.status || e?.message);
-    return [];
-  });
+  // 1) 인증 사용자
+  let authItems = await octokit
+    .paginate(octokit.activity.listReposStarredByAuthenticatedUser, { per_page: 100 })
+    .catch((e) => {
+      console.warn("[fetchStarred] auth paginate error:", e?.status || e?.message);
+      return [];
+    });
   let base = normalizeStarItems(authItems);
   console.log("[fetchStarred] authenticated repos:", base.length);
 
   // 2) 0건이면 공개 스타 폴백
   if (base.length === 0 && username) {
     console.log("[fetchStarred] fallback → public stars of", username);
-    const pubItems = await octokit.paginate(
-      octokit.activity.listReposStarredByUser,
-      { username, per_page: 100 }
-    ).catch(e => {
-      console.warn("[fetchStarred] public paginate error:", e?.status || e?.message);
-      return [];
-    });
+    const pubItems = await octokit
+      .paginate(octokit.activity.listReposStarredByUser, { username, per_page: 100 })
+      .catch((e) => {
+        console.warn("[fetchStarred] public paginate error:", e?.status || e?.message);
+        return [];
+      });
     base = normalizeStarItems(pubItems);
     console.log("[fetchStarred] public repos:", base.length);
   }
@@ -154,13 +235,12 @@ async function fetchStarred(username) {
           repo: r.name,
         });
         names = Array.isArray(tr?.data?.names) ? tr.data.names : [];
-      } catch (e) {
-        // 404/권한/레이트리밋 등은 무시
+      } catch {
         names = [];
       }
     }
 
-    // 🔸 원본 r을 건드리지 않고 새 객체로 반환 (topics는 항상 배열)
+    // 원본 수정 금지: 필요한 필드만 복제 + topics는 항상 배열
     out.push({
       owner: { login: r.owner.login },
       name: r.name,
@@ -172,7 +252,7 @@ async function fetchStarred(username) {
     i++;
   }
 
-  console.log("[fetchStarred] sample:", out.slice(0, 5).map(x => `${x.owner.login}/${x.name}`));
+  console.log("[fetchStarred] sample:", out.slice(0, 5).map((x) => `${x.owner.login}/${x.name}`));
   return out;
 }
 
@@ -205,7 +285,7 @@ const main = async () => {
   const groups = {};
 
   if (listsCfg && listsCfg.length) {
-    // ✅ YAML 기반 “리스트” 분류
+    // ✅ YAML 기반 “리스트” 분류 (한 레포가 여러 리스트에 들어갈 수 있음)
     for (const r of starred) {
       let hit = 0;
       for (const rule of listsCfg) {
@@ -222,7 +302,7 @@ const main = async () => {
     );
 
     ensureDir(WIKI_DIR);
-    const order = [...listsCfg.map(l => l.name), UNC];
+    const order = [...listsCfg.map((l) => l.name), UNC];
     write(path.join(WIKI_DIR, "Home.md"), renderHomeFromGroups(groups, order));
 
     for (const name of order) {
@@ -232,7 +312,7 @@ const main = async () => {
       write(path.join(WIKI_DIR, `${toFile(name)}.md`), body);
     }
   } else {
-    // 🔁 lists.yml 없으면 키워드 분류 사용
+    // 🔁 lists.yml 없으면 키워드 카테고리로 분류
     for (const r of starred) {
       const cat = pickFallbackCategory(r);
       (groups[cat] ||= []).push(r);
@@ -256,4 +336,7 @@ const main = async () => {
   console.log("Generated files:", files);
 };
 
-main().catch((e) => { console.error("ERROR:", e); process.exit(1); });
+main().catch((e) => {
+  console.error("ERROR:", e);
+  process.exit(1);
+});
