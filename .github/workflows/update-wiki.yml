@@ -2,34 +2,56 @@ name: Update Wiki from Stars
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 15 * * *"  # 매일 00:00 KST (UTC 15:00)
+    - cron: "0 15 * * *"  # 매일 00:00 KST
+
 jobs:
   run:
     runs-on: ubuntu-latest
     permissions: { contents: write }
+
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
+
       - name: Install deps
         run: npm i @octokit/rest
+
       - name: Generate wiki pages
         env:
           STAR_TOKEN: ${{ secrets.STAR_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: node scripts/update-wiki.js
-      - name: Clone wiki & push
+
+      # ⬇️ 생성물 확인 (여기서 파일 없으면 바로 실패)
+      - name: List generated wiki files
+        run: |
+          echo "===== wiki dir ====="
+          if [ -d wiki ]; then ls -al wiki; else echo "wiki dir NOT FOUND"; fi
+          FILES=$(ls wiki/*.md 2>/dev/null | wc -l || true)
+          echo "MD files: $FILES"
+          if [ "$FILES" -eq 0 ]; then
+            echo "::error ::No wiki files were generated. Check scripts/update-wiki.js"
+            exit 1
+          fi
+
+      - name: Clone wiki repo
         run: |
           git clone "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git" wiki-repo
-          mkdir -p wiki-repo
-          cp -r wiki/* wiki-repo/ || true
+          echo "===== wiki-repo dir ====="; ls -al wiki-repo || true
+
+      - name: Copy pages and push
+        run: |
+          cp -f wiki/*.md wiki-repo/ || true
           cd wiki-repo
           git config user.name  "${{ github.actor }}"
           git config user.email "${{ github.actor }}@users.noreply.github.com"
+          echo "===== git status BEFORE ====="; git status
           git add -A
           if git diff --cached --quiet; then
-            echo "No changes."
+            echo "::warning ::No changes to commit (files identical)"
           else
             git commit -m "chore(wiki): auto-update from stars [skip ci]"
-            git push
+            git push origin HEAD
           fi
+          echo "===== git status AFTER ====="; git status
