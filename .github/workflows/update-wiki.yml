@@ -1,88 +1,82 @@
 name: Update Wiki from Stars
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: {}
   schedule:
-    - cron: "0 15 * * *"  # 매일 00:00 KST(= UTC 15:00)
+    # 매일 00:00 (KST) = 15:00 UTC
+    - cron: "0 15 * * *"
+
+permissions:
+  contents: write   # wiki push 포함을 위해 필요
+
+env:
+  TZ: Asia/Seoul
+  STAR_TOKEN: ${{ secrets.STAR_TOKEN }}
+  # 아래 환경변수는 선택 설정 (스크립트에서 사용)
+  TITLE_STYLE: inline        # inline | newline
+  NOTE_LABEL: "노트"
+  NOTE_EMOJI: ""
+  MEMO_PLACEHOLDER: ""       # 메모 없을 때 표시
+  PRUNE_WIKI: "true"         # Home/카테고리/_Sidebar/notes 외 클린
 
 jobs:
-  run:
+  update:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    env:
-      WIKI_REMOTE: https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git
 
     steps:
       - name: Checkout repo
+      # 메인 레포(스크립트, config/* 등) 체크아웃
         uses: actions/checkout@v4
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: "20"
 
-      - name: Install deps
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci
-          else
-            npm i
-          fi
-
-      - name: Clone wiki repo (into ./wiki)
-        run: |
-          git clone "${WIKI_REMOTE}" wiki
-          cd wiki
-          echo "Wiki branch: $(git rev-parse --abbrev-ref HEAD || echo master)"
-          ls -al
-
-      # 1) notes/만 남기고 wiki 루트 전체 강제 청소
-      - name: Hard clean wiki (keep notes/)
-        working-directory: wiki
-        shell: bash
+      - name: Install deps (fallback to ad-hoc)
         run: |
           set -e
-          # 숨김 포함, 확장 글로브
-          shopt -s extglob dotglob
-          # .git, notes/만 남기고 전부 삭제 + git rm으로 추적 제거
-          for f in *; do
-            if [[ "$f" != ".git" && "$f" != "notes" ]]; then
-              rm -rf "$f"
-              git rm -rf --ignore-unmatch "$f" || true
+          if [ -f package.json ]; then
+            if command -v pnpm >/dev/null 2>&1; then
+              pnpm i --frozen-lockfile || pnpm i
+            else
+              npm ci || npm i
             fi
-          done
-          # 혹시 남은 빈 디렉터리 정리
-          find . -type d -empty -not -path './.git' -not -path './notes' -delete
+          else
+            # package.json이 없어도 동작하도록 최소 의존성 설치
+            npm init -y
+            npm i js-yaml @octokit/rest
+          fi
 
-
-      - name: Generate wiki pages (write into ./wiki)
-        env:
-          STAR_TOKEN: ${{ secrets.STAR_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          TITLE_STYLE: newline
-          NOTE_LABEL: "노트"
-          NOTE_EMOJI: "📝"
-        run: node scripts/update-wiki.js
-
-
-      - name: Preview generated files
+      - name: Clone Wiki repo
         run: |
-          echo "===== wiki/ ====="
-          ls -al wiki || true
-          echo "----- Home.md preview -----"
-          head -n 30 wiki/Home.md || true
+          set -e
+          WIKI_URL="https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git"
+          rm -rf wiki
+          git clone "$WIKI_URL" wiki
+          cd wiki
+          # Wiki 기본 브랜치가 master인 경우가 많음
+          git fetch origin
+          git checkout master || git checkout main || git checkout -b master
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global --add safe.directory "$PWD"
 
-      - name: Commit & push to Wiki
+      - name: Run update-wiki script
+        # 앞서 드린 수정본 scripts/update-wiki.js 사용
+        run: |
+          node --version
+          node scripts/update-wiki.js
+
+      - name: Commit & Push changes to Wiki
         working-directory: wiki
         run: |
-          git config user.name  "${{ github.actor }}"
-          git config user.email "${{ github.actor }}@users.noreply.github.com"
-          git add -A
-          if git diff --cached --quiet; then
-            echo "No changes."
+          set -e
+          # 변경 여부 확인 후 커밋/푸시
+          if ! git diff --quiet || ! git diff --cached --quiet; then
+            git add -A
+            git commit -m "ci: update wiki (pages + _Sidebar for categories only)"
+            git push
           else
-            git commit -m "chore(wiki): clean & rebuild from stars [skip ci]"
-            BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo master)
-            git push origin "$BRANCH"
+            echo "No wiki changes."
           fi

@@ -1,24 +1,25 @@
-// scripts/update-wiki.js — BASIC + notes + newline-title (ESM)
+// scripts/update-wiki.js — BASIC + notes + newline-title (ESM) + sidebar + prune
 import fs from "fs";
 import path from "path";
 import yaml from "js-yaml";
 import { Octokit } from "@octokit/rest";
 
-console.log("== Stars → Wiki (BASIC+NOTES) ==");
+console.log("== Stars → Wiki (BASIC+NOTES+SIDEBAR+PRUNE) ==");
 
-const WIKI_DIR   = "wiki";                                  // 위키 저장소 클론 위치
-const NOTES_DIR  = path.join(WIKI_DIR, "notes");            // 노트 저장 경로
+const WIKI_DIR    = "wiki";                                     // 위키 저장소 클론 위치(.wiki.git)
+const NOTES_DIR   = path.join(WIKI_DIR, "notes");               // 노트 저장 경로
 const TITLE_STYLE = (process.env.TITLE_STYLE || "inline").toLowerCase(); // inline | newline
 const NOTE_LABEL  = process.env.NOTE_LABEL || "노트";
 const NOTE_EMOJI  = process.env.NOTE_EMOJI || "";
-const MEMO_PH     = process.env.MEMO_PLACEHOLDER ?? "";     // 메모가 없을 때 표시(예: "없음")
+const MEMO_PH     = process.env.MEMO_PLACEHOLDER ?? "";         // 메모 없을 때 표시
+const PRUNE_WIKI  = (process.env.PRUNE_WIKI || "true").toLowerCase() === "true"; // 불필요 파일 삭제 여부
 
-const octokit  = new Octokit({ auth: process.env.STAR_TOKEN });
+const octokit = new Octokit({ auth: process.env.STAR_TOKEN });
 
 /* ---------------- utils ---------------- */
 const ensureDir = (d) => { if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true }); };
 const toFile    = (t) => t.replace(/[\/\\]/g, "-").replace(/\s+/g, "-");
-const write     = (p, c) => { fs.writeFileSync(p, c, "utf8"); console.log("WROTE:", p, c.length, "bytes"); };
+const write     = (p, c) => { ensureDir(path.dirname(p)); fs.writeFileSync(p, c, "utf8"); console.log("WROTE:", p, c.length, "bytes"); };
 
 // KST 문자열
 function nowInKST() {
@@ -26,7 +27,7 @@ function nowInKST() {
   return new Intl.DateTimeFormat("ko-KR", {
     timeZone: "Asia/Seoul", year: "numeric", month: "2-digit",
     day: "2-digit", hour: "2-digit", minute: "2-digit"
-  }).format(d).replace(/\./g, "").replace(" ", " ").replace(/\s*$/, " KST");
+  }).format(d).replace(/\./g, "").replace(/\s*$/, " KST");
 }
 
 /* ---------------- lists.yml loader ---------------- */
@@ -58,7 +59,7 @@ function loadUserNotes() {
         title: String(v.title || "").trim(),
         desc:  String(v.desc || "").trim(),
         link:  String(v.link || "").trim(),
-        link_label: String(v.link_label || "").trim(), // 라벨 커스텀(이모지 포함 가능)
+        link_label: String(v.link_label || "").trim(),
         show_original: !!v.show_original,
       };
     }
@@ -84,6 +85,8 @@ const FALLBACK_CATS = [
   "시각화 & 도구 (Visualization & Tool)",
   "데이터 & 처리 (Data & Processing)",
 ];
+const UNC = "기타 / 미분류";
+
 const KEYWORDS = {
   "웹 & 프론트엔드 (Web & Frontend)": ["react","next","mui","material","shadcn","tailwind","vercel","ui","form","rrweb","reveal","ts-brand","lenses","velite","orval","image-url","darkmode","legid","liquid-glass","base-ui","magicui","ai-elements","resumable","storybook","vite","webpack","rollup","eslint","prettier","svelte","vue","nuxt","angular"],
   "인공지능 / 머신러닝 (AI / ML)": ["pytorch","tensorflow","jax","onnx","transformers","llm","rag","gemma","litgpt","finetune","ner","generate-sequences","kbla","execu","simpletuner","marimo","verifiers","lotus","orbital","ml","agent","ai","diffusion","stable-diffusion","trl","autogen","langchain","ragas","mlflow","sklearn"],
@@ -96,7 +99,7 @@ const KEYWORDS = {
   "리소스 / 자료 모음 (Resources)": ["awesome","list","profile-readme","devteam","dev-conf-replay","gallery","book","cheatsheet","templates"],
   "확장 & 기타 (Extensions & Others)": ["mlxtend","extension","helper","toolkit","snk","gitanimals","build-your-own-x","scripts","cli","widget","plugin"],
 };
-const UNC = "기타 / 미분류";
+
 function pickFallbackCategory(repo) {
   const hay = `${repo?.name ?? ""} ${repo?.description ?? ""}`.toLowerCase();
   const topics = Array.isArray(repo?.topics) ? repo.topics.map(t => String(t).toLowerCase()) : [];
@@ -111,7 +114,7 @@ function pickFallbackCategory(repo) {
 function normalizeStarItems(items) {
   if (!Array.isArray(items)) return [];
   return items
-    .map(it => (it && it.repo) ? it.repo : it) // timeline 이벤트 대응
+    .map(it => (it && it.repo) ? it.repo : it)
     .filter(r => r && r.owner && r.owner.login && r.name);
 }
 
@@ -198,11 +201,9 @@ function lineOf(r) {
   const desc  = getDescWithNote(r);
   const star  = r.stargazers_count ? `  ⭐ ${r.stargazers_count}` : "";
 
-  // 메모 표시(항상 '· 메모:' 출력, 내용 없으면 MEMO_PH)
   const memoText = note?.desc ? note.desc : MEMO_PH;
   const memoPart = ` · 메모: ${memoText}`;
 
-  // 노트 링크(선택) + 자동 템플릿
   let notePart = "";
   if (note?.link) {
     const abs = path.isAbsolute(note.link) ? note.link : path.join(WIKI_DIR, note.link);
@@ -216,7 +217,6 @@ function lineOf(r) {
   }
 
   if (note?.title && TITLE_STYLE === "newline") {
-    // 2줄 스타일
     return `- **${note.title}**\n  ${link} — ${desc}${memoPart}${notePart}${star}`;
   } else if (note?.title) {
     return `- **${note.title}** · ${link} — ${desc}${memoPart}${notePart}${star}`;
@@ -227,7 +227,7 @@ function lineOf(r) {
   }
 }
 
-/* ---------------- render ---------------- */
+/* ---------------- renderers ---------------- */
 function renderHomeFromGroups(groups, order) {
   const kst = nowInKST();
   let out = `# ⭐ Starred Repos (자동 생성)\n\n> 마지막 업데이트(한국 시간): ${kst}\n\n`;
@@ -237,6 +237,37 @@ function renderHomeFromGroups(groups, order) {
     out += `- [[${name}|${toFile(name)}]] (${list.length})\n`;
   }
   return out + "\n";
+}
+
+/** _Sidebar.md 생성 (Home + 카테고리만) */
+function writeSidebar({ wikiRoot, order }) {
+  const lines = [];
+  lines.push(`- [Home](Home)`, "");
+  for (const name of order) {
+    lines.push(`- [${name}](${toFile(name)})`);
+  }
+  const sidebar = lines.join("\n") + "\n";
+  const p = path.join(wikiRoot, "_Sidebar.md");
+  write(p, sidebar);
+  return p;
+}
+
+/** 위키 정리: Home, 카테고리 파일, _Sidebar.md, notes/ 만 남기고 나머지 제거 */
+function pruneWiki({ wikiRoot, keepFiles, keepDirs = ["notes"] }) {
+  const keep = new Set(keepFiles.concat(["_Sidebar.md", "Home.md"]));
+  const entries = fs.readdirSync(wikiRoot, { withFileTypes: true });
+  for (const e of entries) {
+    if (e.name === ".git") continue;
+    const full = path.join(wikiRoot, e.name);
+    if (e.isDirectory()) {
+      if (!keepDirs.includes(e.name)) fs.rmSync(full, { recursive: true, force: true });
+      continue;
+    }
+    if (e.isFile() && e.name.endsWith(".md") && !keep.has(e.name)) {
+      fs.unlinkSync(full);
+    }
+  }
+  console.log("[prune] kept files:", Array.from(keep).join(", "));
 }
 
 /* ---------------- main ---------------- */
@@ -288,16 +319,28 @@ const main = async () => {
     ? [...listsCfg.map(l => l.name), UNC]
     : [...FALLBACK_CATS, UNC];
 
+  // Home + 카테고리 페이지 생성
   write(path.join(WIKI_DIR, "Home.md"), renderHomeFromGroups(groups, order));
+  const keptMdFiles = ["Home.md"];
   for (const name of order) {
     const list = groups[name] || [];
     if (!list.length) continue;
     const body = `# ${name}\n\n` + list.map(lineOf).join("\n") + "\n";
-    write(path.join(WIKI_DIR, `${toFile(name)}.md`), body);
+    const filename = `${toFile(name)}.md`;
+    write(path.join(WIKI_DIR, filename), body);
+    keptMdFiles.push(filename);
   }
 
-  const files = fs.readdirSync(WIKI_DIR).filter(f => f.endsWith(".md"));
-  console.log("Generated files:", files);
+  // 사이드바 생성 (Home + 카테고리만 표시)
+  writeSidebar({ wikiRoot: WIKI_DIR, order });
+
+  // 필요 시 위키 정리(기존에 남은 개별 페이지 제거)
+  if (PRUNE_WIKI) {
+    pruneWiki({ wikiRoot: WIKI_DIR, keepFiles: keptMdFiles });
+  }
+
+  const files = fs.readdirSync(WIKI_DIR).filter(f => f.endsWith(".md") || f === "notes");
+  console.log("Final wiki files:", files);
 };
 
 main().catch(e => { console.error("ERROR:", e); process.exit(1); });
